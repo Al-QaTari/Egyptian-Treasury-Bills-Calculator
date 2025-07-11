@@ -98,10 +98,17 @@ def main():
                         errors="coerce",
                     )
                     day_names_en = {
-                        0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday",
-                        4: "Friday", 5: "Saturday", 6: "Sunday",
+                        0: "Monday",
+                        1: "Tuesday",
+                        2: "Wednesday",
+                        3: "Thursday",
+                        4: "Friday",
+                        5: "Saturday",
+                        6: "Sunday",
                     }
-                    data_df["day_name_en"] = data_df["session_datetime"].dt.dayofweek.map(day_names_en)
+                    data_df["day_name_en"] = (
+                        data_df["session_datetime"].dt.dayofweek.map(day_names_en)
+                    )
 
                     sunday_df = data_df[data_df["day_name_en"] == "Sunday"]
                     thursday_df = data_df[data_df["day_name_en"] == "Thursday"]
@@ -120,7 +127,9 @@ def main():
 
                     if sunday_df.empty and thursday_df.empty:
                         st.info(
-                            prepare_arabic_text("لا توجد بيانات عطاءات حديثة ليومي الأحد والخميس.")
+                            prepare_arabic_text(
+                                "لا توجد بيانات عطاءات حديثة ليومي الأحد والخميس."
+                            )
                         )
 
                 except Exception as e:
@@ -153,9 +162,10 @@ def main():
                 try:
                     update_status("جاري تهيئة عملية التحديث...")
                     fetch_data_from_cbe(db_manager, status_callback=update_status)
-                    st.session_state.df_data, st.session_state.last_update = (
-                        db_manager.load_latest_data()
-                    )
+                    (
+                        st.session_state.df_data,
+                        st.session_state.last_update,
+                    ) = db_manager.load_latest_data()
                     st.session_state.historical_df = (
                         db_manager.load_all_historical_data()
                     )
@@ -165,9 +175,7 @@ def main():
                     st.rerun()
                 except Exception as e:
                     status_placeholder.empty()
-                    st.error(
-                        prepare_arabic_text(f"⚠️ حدث خطأ: {e}"), icon="⚠️"
-                    )
+                    st.error(prepare_arabic_text(f"⚠️ حدث خطأ: {e}"), icon="⚠️")
 
             if "البيانات الأولية" in last_update:
                 st.warning(
@@ -245,9 +253,9 @@ def main():
             )
             tax_rate_main = st.number_input(
                 prepare_arabic_text("نسبة الضريبة على الأرباح (%)"),
-                0.0,
-                100.0,
-                C.DEFAULT_TAX_RATE_PERCENT,
+                min_value=0.0,
+                max_value=100.0,
+                value=C.DEFAULT_TAX_RATE_PERCENT,
                 step=0.5,
                 format="%.1f",
             )
@@ -368,9 +376,9 @@ def main():
             )
             tax_rate_secondary = st.number_input(
                 prepare_arabic_text("نسبة الضريبة على الأرباح (%)"),
-                0.0,
-                100.0,
-                C.DEFAULT_TAX_RATE_PERCENT,
+                min_value=0.0,
+                max_value=100.0,
+                value=C.DEFAULT_TAX_RATE_PERCENT,
                 step=0.5,
                 format="%.1f",
                 key="secondary_tax",
