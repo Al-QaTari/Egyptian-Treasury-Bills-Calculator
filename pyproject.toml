@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+markers = [
+    "ui: marks tests as end-to-end UI tests",
+]
