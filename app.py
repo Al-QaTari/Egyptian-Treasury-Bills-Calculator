@@ -106,9 +106,9 @@ def main():
                         5: "Saturday",
                         6: "Sunday",
                     }
-                    data_df["day_name_en"] = (
-                        data_df["session_datetime"].dt.dayofweek.map(day_names_en)
-                    )
+                    data_df["day_name_en"] = data_df[
+                        "session_datetime"
+                    ].dt.dayofweek.map(day_names_en)
 
                     sunday_df = data_df[data_df["day_name_en"] == "Sunday"]
                     thursday_df = data_df[data_df["day_name_en"] == "Thursday"]
