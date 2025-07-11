@@ -9,13 +9,12 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    # لم نعد بحاجة لصلاحيات الكتابة
-    # permissions:
-    #   contents: write
 
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -26,18 +25,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          # لا يزال من الجيد تثبيتها هنا لضمان وجودها
-          pip install ruff black pytest 
-
-      - name: Run tests
-        run: pytest -m "not ui"
+          pip install ruff black pytest
 
       # --- START OF FINAL FIX ---
-      # الخطوة الجديدة: الفحص فقط، وليس الإصلاح
+      - name: Run tests (and skip UI tests)
+        run: pytest -m "not ui" # هذا السطر يضمن تجاهل اختبارات الواجهة
+      # --- END OF FINAL FIX ---
+
       - name: Lint with ruff
         run: ruff check .
 
-      # الخطوة الجديدة: الفحص فقط، وليس التنسيق
       - name: Check formatting with black
         run: black . --check
-      # --- END OF FINAL FIX ---
