@@ -1,4 +1,150 @@
- streamlit run app.py)
+# app.py
+import streamlit as st
+import pytz
+from datetime import datetime
+import plotly.express as px
+import pandas as pd
+import time
+
+from utils import prepare_arabic_text, load_css, format_currency
+from db_manager import get_db_manager
+from calculations import calculate_primary_yield, analyze_secondary_sale
+from cbe_scraper import fetch_data_from_cbe
+import constants as C
+
+
+def display_auction_results(title: str, info: str, df: pd.DataFrame):
+    """
+    دالة موحدة لعرض نتائج عطاء معين بشكل منسق وواضح.
+    """
+    # لا تعرض القسم بأكمله إذا لم تكن هناك بيانات للعطاء
+    if not df.empty:
+        session_date_str = df[C.SESSION_DATE_COLUMN_NAME].iloc[0]
+        st.markdown(f"<h5 style='text-align: center; color:#ffc107; margin-bottom: 10px;'>{prepare_arabic_text(f'{title} - {session_date_str}')}</h5>", unsafe_allow_html=True)
+        st.info(prepare_arabic_text(info), icon="🗓️")
+        
+        cols = st.columns(len(df))
+        for i, (_, tenor_data) in enumerate(df.iterrows()):
+            with cols[i]:
+                rate = tenor_data[C.YIELD_COLUMN_NAME]
+                tenor = tenor_data[C.TENOR_COLUMN_NAME]
+                st.markdown(f"""
+                    <div style="text-align: center; background-color: #495057; padding: 8px 5px; border-radius: 10px; height: 100%;">
+                        <p style="font-size: 0.9rem; color: #adb5bd; margin: 0; white-space: nowrap;">{prepare_arabic_text(f"أجل {tenor} يوم")}</p>
+                        <p style="font-size: 1.5rem; color: #ffffff; font-weight: 600; margin: 5px 0 0 0;">{rate:.3f}%</p>
+                    </div>
+                """, unsafe_allow_html=True)
+        # فاصل بين أقسام العطاءات
+        st.markdown("<hr style='margin-top: 25px; margin-bottom: 25px; border-color: #2d333b; border-style: dashed;'>", unsafe_allow_html=True)
+
+
+def main():
+    st.set_page_config(
+        layout="wide",
+        page_title=prepare_arabic_text("حاسبة أذون الخزانة"),
+        page_icon="🏦",
+    )
+    load_css(C.CSS_FILE_PATH)
+
+    db_manager = get_db_manager()
+
+    if "df_data" not in st.session_state:
+        st.session_state.df_data, st.session_state.last_update = db_manager.load_latest_data()
+    if "historical_df" not in st.session_state:
+        st.session_state.historical_df = db_manager.load_all_historical_data()
+
+    data_df = st.session_state.df_data
+    last_update = st.session_state.last_update
+    historical_df = st.session_state.historical_df
+
+    st.markdown(
+        f"""
+    <div class="centered-header" style="background-color: #343a40; padding: 20px 10px; border-radius: 15px; margin-bottom: 1rem; box-shadow: 0 4px 12px 0 rgba(0,0,0,0.1);">
+        <h1 style="color: #ffffff; margin: 0; font-size: 2.5rem;">{prepare_arabic_text(C.APP_TITLE)}</h1>
+        <p style="color: #aab8c2; margin: 10px 0 0 0; font-size: 1.1rem;">{prepare_arabic_text(C.APP_HEADER)}</p>
+        <div style="margin-top: 20px; font-size: 1rem; color: #999; text-align: center;">
+            {prepare_arabic_text("صُمم وبُرمج بواسطة")} 
+            <span style="font-weight: bold; color: #00bfff;">{C.AUTHOR_NAME}</span>
+        </div>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
+
+    top_col1, top_col2 = st.columns([2, 1])
+
+    with top_col1:
+        with st.container(border=True):
+            st.subheader(prepare_arabic_text("📊 أحدث العوائد المعتمدة"), anchor=False)
+            st.markdown("<hr style='margin-top: -10px; margin-bottom: 15px; border-color: #495057;'>", unsafe_allow_html=True)
+            
+            if not data_df.empty and "البيانات الأولية" not in last_update:
+                try:
+                    # تحويل تاريخ الجلسة إلى كائن تاريخ لتحديد اليوم
+                    data_df['session_datetime'] = pd.to_datetime(data_df[C.SESSION_DATE_COLUMN_NAME], format='%d/%m/%Y', errors='coerce')
+                    day_names_en = {0: 'Monday', 1: 'Tuesday', 2: 'Wednesday', 3: 'Thursday', 4: 'Friday', 5: 'Saturday', 6: 'Sunday'}
+                    data_df['day_name_en'] = data_df['session_datetime'].dt.dayofweek.map(day_names_en)
+
+                    # فصل البيانات بناءً على يوم العطاء
+                    sunday_df = data_df[data_df['day_name_en'] == 'Sunday'].sort_values(by=C.TENOR_COLUMN_NAME)
+                    thursday_df = data_df[data_df['day_name_en'] == 'Thursday'].sort_values(by=C.TENOR_COLUMN_NAME)
+
+                    # عرض عطاء الخميس أولاً
+                    display_auction_results(
+                        title="نتائج عطاء الخميس",
+                        info="آجال (6 أشهر و سنة) - التنفيذ الفعلي يوم الثلاثاء التالي.",
+                        df=thursday_df
+                    )
+                    
+                    # عرض عطاء الأحد ثانياً
+                    display_auction_results(
+                        title="نتائج عطاء الأحد",
+                        info="آجال (3 أشهر و 9 أشهر) - التنفيذ الفعلي يوم الثلاثاء التالي.",
+                        df=sunday_df
+                    )
+
+                    if sunday_df.empty and thursday_df.empty:
+                        st.info(prepare_arabic_text("لا توجد بيانات عطاءات حديثة ليومي الأحد والخميس."))
+
+                except Exception as e:
+                    st.error(f"حدث خطأ أثناء معالجة البيانات: {e}")
+            else:
+                st.info(prepare_arabic_text("في انتظار ورود البيانات من البنك المركزي..."))
+
+    with top_col2:
+        with st.container(border=True):
+            st.subheader(prepare_arabic_text("📡 حالة البيانات"), anchor=False)
+            st.write(f"{prepare_arabic_text('**آخر تحديث:**')} {prepare_arabic_text(last_update)}")
+
+            if st.button(prepare_arabic_text("🔄 تحديث البيانات من البنك المركزي"), use_container_width=True, type="primary"):
+                status_placeholder = st.empty()
+                def update_status(message):
+                    status_placeholder.markdown(f"""<div style="padding: 1rem; border-radius: 0.5rem; background-color: rgba(144, 238, 144, 0.1); border: 1px solid #2e7d32; color: #e0e0e0; margin-bottom: 1rem;">⏳ {prepare_arabic_text(message)}</div>""", unsafe_allow_html=True)
+                try:
+                    update_status("جاري تهيئة عملية التحديث...")
+                    fetch_data_from_cbe(db_manager, status_callback=update_status)
+                    st.session_state.df_data, st.session_state.last_update = db_manager.load_latest_data()
+                    st.session_state.historical_df = db_manager.load_all_historical_data()
+                    status_placeholder.empty()
+                    st.toast(prepare_arabic_text("تم تحديث البيانات بنجاح!"), icon="✅")
+                    time.sleep(0.1)
+                    st.rerun()
+                except Exception as e:
+                    status_placeholder.empty()
+                    st.error(prepare_arabic_text(f"⚠️ حدث خطأ أثناء محاولة تحديث البيانات: {e}"), icon="⚠️")
+
+            if "البيانات الأولية" in last_update:
+                st.warning(prepare_arabic_text("قاعدة البيانات فارغة. قم بتحديث البيانات."), icon="⏳")
+            else:
+                try:
+                    last_update_dt = datetime.strptime(last_update.replace(prepare_arabic_text("بتاريخ "), ""), "%d-%m-%Y")
+                    if (datetime.now(pytz.timezone(C.TIMEZONE)).date() - last_update_dt.date()).days > 0:
+                        st.info("ℹ️ الأسعار المعروضة هي لآخر عطاء منشور رسميًا.")
+                    else:
+                        st.success(prepare_arabic_text("البيانات المعروضة محدثة لليوم."), icon="✅")
+                except (ValueError, TypeError):
+                    pass
+            st.link_button(prepare_arabic_text("🔗 فتح موقع البنك"), C.CBE_DATA_URL, use_container_width=True)
 
     st.divider()
     st.header(prepare_arabic_text(C.PRIMARY_CALCULATOR_TITLE))
