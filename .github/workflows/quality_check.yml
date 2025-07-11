@@ -9,8 +9,6 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
       - name: Check out repository code
@@ -27,16 +25,12 @@ jobs:
           pip install -r requirements.txt
           pip install ruff black pytest
 
-      - name: Run tests (skip UI tests)
+      # --- التعديل الوحيد والمهم هنا ---
+      - name: Run tests (and skip UI tests)
         run: pytest -m "not ui"
 
-      - name: Format code with ruff and black
-        run: |
-          ruff check . --fix
-          black .
-      
-      - name: Commit formatting changes
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "style: Auto-format code with ruff & black"
-          branch: ${{ github.head_ref || github.ref_name }}
+      - name: Lint with ruff
+        run: ruff check .
+
+      - name: Check formatting with black
+        run: black . --check
