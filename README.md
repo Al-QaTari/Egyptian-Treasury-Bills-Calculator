@@ -133,7 +133,7 @@ Treasury_Calculator/
 - **بدون مسؤولية**: لا يتحمل المؤلفون أي مسؤولية عن أي أضرار قد تنشأ عن استخدام البرنامج.
 
 <p align="center">
-  <a href="https://github.com/Al-QaTari/Egyptian-Treasury-Bills-Calculator/blob/main/LICENSE.txt">
+  <a href="https://github.com/Al-QaTari/Egyptian-Treasury-Bills-Calculator/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT">
   </a>
   <br>
