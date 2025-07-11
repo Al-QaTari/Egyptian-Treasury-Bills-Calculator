@@ -9,6 +9,8 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Check out repository code
@@ -28,8 +30,13 @@ jobs:
       - name: Run tests (skip UI tests)
         run: pytest -m "not ui"
 
-      - name: Lint with ruff
-        run: ruff check .
-
-      - name: Check formatting with black
-        run: black . --check
+      - name: Format code with ruff and black
+        run: |
+          ruff check . --fix
+          black .
+      
+      - name: Commit formatting changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "style: Auto-format code with ruff & black"
+          branch: ${{ github.head_ref || github.ref_name }}
