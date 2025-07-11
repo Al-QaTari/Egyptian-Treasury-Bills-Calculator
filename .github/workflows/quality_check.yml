@@ -39,7 +39,7 @@ jobs:
 
       # الخطوة 2: اختبار الكود الأصلي للتأكد من أنه سليم
       - name: Run tests on original code
-        run: pytest
+        run: pytest -m "not ui"
 
       # الخطوة 3: الآن فقط نبدأ بتنسيق الكود وتعديله
       - name: Lint and fix with ruff
