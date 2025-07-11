@@ -13,8 +13,6 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -27,10 +25,8 @@ jobs:
           pip install -r requirements.txt
           pip install ruff black pytest
 
-      # --- START OF FINAL FIX ---
-      - name: Run tests (and skip UI tests)
-        run: pytest -m "not ui" # هذا السطر يضمن تجاهل اختبارات الواجهة
-      # --- END OF FINAL FIX ---
+      - name: Run tests (skip UI tests)
+        run: pytest -m "not ui"
 
       - name: Lint with ruff
         run: ruff check .
