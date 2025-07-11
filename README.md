@@ -3,10 +3,10 @@
   <p><strong>تطبيقك الأمثل لتحليل وحساب عوائد أذون الخزانة المصرية بدقة وسهولة.</strong></p>
   
   <p>
-    <a href="[https://github.com/Al-QaTari/Treasury_Calculator](https://github.com/Al-QaTari/Egyptian-Treasury-Bills-Calculator)/actions/workflows/quality_check.yml"><img src="https://github.com/Al-QaTari/Treasury_Calculator/actions/workflows/quality_check.yml/badge.svg" alt="Code Quality Check"></a>
-    <a href="[https://github.com/Al-QaTari/Treasury_Calculator](https://github.com/Al-QaTari/Egyptian-Treasury-Bills-Calculator)/actions/workflows/scheduled_scrape.yml"><img src="https://github.com/Al-QaTari/Treasury_Calculator/actions/workflows/scheduled_scrape.yml/badge.svg" alt="Scheduled Scrape"></a>
+    <a href="https://github.com/Al-QaTari/Egyptian-Treasury-Bills-Calculator/actions/workflows/quality_check.yml"><img src="https://github.com/Al-QaTari/Egyptian-Treasury-Bills-Calculator/actions/workflows/quality_check.yml/badge.svg" alt="Code Quality Check"></a>
+    <a href="https://github.com/Al-QaTari/Egyptian-Treasury-Bills-Calculator/actions/workflows/scheduled_scrape.yml"><img src="https://github.com/Al-QaTari/Egyptian-Treasury-Bills-Calculator/actions/workflows/scheduled_scrape.yml/badge.svg" alt="Scheduled Scrape"></a>
     <a href="https://streamlit.io" target="_blank"><img src="https://img.shields.io/badge/Made_with-Streamlit-FF4B4B?logo=streamlit" alt="Made with Streamlit"></a>
-    <a href="https://www.python.org/" target="_blank"><img src="https://img.shields.io/badge/Python-3.8%2B-blue?logo=python" alt="Python Version"></a>
+    <a href="https://www.python.org/" target="_blank"><img src="https://img.shields.io/badge/Python-3.11%2B-blue?logo=python" alt="Python Version"></a>
   </p>
 </div>
 
