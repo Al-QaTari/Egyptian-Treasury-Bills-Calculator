@@ -10,10 +10,12 @@ from cbe_scraper import parse_cbe_html
 from db_manager import DatabaseManager
 from .test_cbe_scraper import MOCK_HTML_CONTENT
 
+
 @pytest.fixture
 def db_for_integration():
     """إعداد قاعدة بيانات وهمية في الذاكرة لاختبار التكامل."""
     return DatabaseManager(db_filename=":memory:")
+
 
 def test_parse_save_load_flow(db_for_integration: DatabaseManager):
     """

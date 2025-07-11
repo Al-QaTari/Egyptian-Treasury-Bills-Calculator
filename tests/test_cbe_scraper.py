@@ -18,24 +18,30 @@ MOCK_HTML_CONTENT = """
 </body></html>
 """
 
-def test_html_parser_full_run(): # تم إزالة mocker لأنها غير مستخدمة هنا
+
+def test_html_parser_full_run():  # تم إزالة mocker لأنها غير مستخدمة هنا
     """🧪 يختبر دالة تحليل HTML في وضع الجلب الكامل."""
     parsed_df = parse_cbe_html(MOCK_HTML_CONTENT)
     assert isinstance(parsed_df, pd.DataFrame)
     assert len(parsed_df) == 4
     # تحويل الآجال إلى أرقام للمقارنة الصحيحة
     parsed_df[C.TENOR_COLUMN_NAME] = pd.to_numeric(parsed_df[C.TENOR_COLUMN_NAME])
-    yield_364 = parsed_df[parsed_df[C.TENOR_COLUMN_NAME] == 364][C.YIELD_COLUMN_NAME].iloc[0]
+    yield_364 = parsed_df[parsed_df[C.TENOR_COLUMN_NAME] == 364][
+        C.YIELD_COLUMN_NAME
+    ].iloc[0]
     assert yield_364 == 25.043
+
 
 def test_html_parser_quick_check():
     """🧪 يختبر دالة تحليل HTML في وضع التحقق السريع."""
     session_date = parse_cbe_html(MOCK_HTML_CONTENT, is_quick_check=True)
     assert session_date == "06/07/2025"
 
+
 def test_verify_page_structure_success():
     """🧪 يختبر أن التحقق من هيكل الصفحة ينجح عند وجود كل العلامات."""
     verify_page_structure(MOCK_HTML_CONTENT)
+
 
 def test_verify_page_structure_failure():
     """🧪 يختبر أن التحقق من هيكل الصفحة يفشل عند فقدان علامة."""

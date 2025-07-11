@@ -139,7 +139,7 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to load historical data: {e}", exc_info=True)
             return pd.DataFrame()
-            
+
     # --- START OF NEW FUNCTION FOR TASK 2 ---
     def get_latest_session_date(self) -> Optional[str]:
         """
@@ -162,7 +162,7 @@ class DatabaseManager:
                 """
                 cursor = conn.cursor()
                 result = cursor.execute(query).fetchone()
-                
+
                 if result:
                     logger.info(f"Latest session date found in DB: {result[0]}")
                     return result[0]
@@ -172,6 +172,9 @@ class DatabaseManager:
                     return None
         except sqlite3.Error as e:
             # هذا طبيعي إذا لم يتم إنشاء الجدول بعد
-            logger.warning(f"Could not get latest session date (table might not exist yet): {e}")
+            logger.warning(
+                f"Could not get latest session date (table might not exist yet): {e}"
+            )
             return None
+
     # --- END OF NEW FUNCTION FOR TASK 2 ---
