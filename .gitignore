@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Database File - مهم جدًا
+cbe_historical_data.db
+
+# Log files
+*.log
+
+# IDE files
+.vscode/
+.idea/
