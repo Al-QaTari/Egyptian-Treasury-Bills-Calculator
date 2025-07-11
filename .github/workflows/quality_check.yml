@@ -9,6 +9,10 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+    
+    # --- التعديل الأمني المطلوب ---
+    permissions:
+      contents: read # نعطي المهمة صلاحية قراءة الكود فقط
 
     steps:
       - name: Check out repository code
@@ -25,7 +29,6 @@ jobs:
           pip install -r requirements.txt
           pip install ruff black pytest
 
-      # --- التعديل الوحيد والمهم هنا ---
       - name: Run tests (and skip UI tests)
         run: pytest -m "not ui"
 
