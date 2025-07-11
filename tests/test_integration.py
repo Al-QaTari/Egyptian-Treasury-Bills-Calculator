@@ -7,8 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from cbe_scraper import fetch_data_from_cbe
 from db_manager import DatabaseManager
-from test_cbe_scraper import MOCK_HTML_CONTENT # نستورد المحتوى الوهمي
-
+from .test_cbe_scraper import MOCK_HTML_CONTENT # نستورد المحتوى الوهمي
 @pytest.fixture
 def in_memory_db_integration():
     """قاعدة بيانات وهمية لاختبار التكامل."""
