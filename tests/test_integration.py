@@ -3,13 +3,14 @@ import sys
 import os
 import pytest
 import pandas as pd
-import streamlit as st # <-- تم إضافة هذا السطر
+import streamlit as st  # <-- تم إضافة هذا السطر
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from cbe_scraper import parse_cbe_html
 from db_manager import DatabaseManager
 from .test_cbe_scraper import MOCK_HTML_CONTENT
+
 
 @pytest.fixture
 def db_for_integration():
@@ -19,6 +20,7 @@ def db_for_integration():
     st.cache_resource.clear()
     # --- END OF FIX ---
     return DatabaseManager(db_filename=":memory:")
+
 
 def test_parse_save_load_flow(db_for_integration: DatabaseManager):
     """
