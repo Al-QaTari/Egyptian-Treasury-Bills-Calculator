@@ -4,31 +4,34 @@ import os
 import pytest
 import pandas as pd
 from datetime import datetime
-import streamlit as st # <-- تم إضافة هذا السطر
+
+# لا حاجة لـ streamlit cache clear بعد الآن لأن كل اختبار معزول تمامًا
+# import streamlit as st 
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from db_manager import DatabaseManager
 import constants as C
 
+# --- START OF FINAL FIX ---
 @pytest.fixture
-def db():
-    """إعداد قاعدة بيانات وهمية مع مسح الكاش قبل كل اختبار."""
-    # --- START OF FIX ---
-    # مسح الكاش لضمان عدم تسرب البيانات بين الاختبارات
-    st.cache_data.clear()
-    st.cache_resource.clear()
-    # --- END OF FIX ---
-    
-    db_manager = DatabaseManager(db_filename=":memory:")
+def db(tmp_path):
+    """
+    إعداد قاعدة بيانات حقيقية ولكن في ملف مؤقت ومنعزل لكل اختبار.
+    يتم حذف الملف تلقائيًا بواسطة pytest بعد انتهاء الاختبار.
+    """
+    # tmp_path هو مسار مؤقت يوفره pytest
+    temp_db_file = tmp_path / "test.db"
+    db_manager = DatabaseManager(db_filename=temp_db_file)
     yield db_manager
+# --- END OF FINAL FIX ---
 
 def test_initial_state(db: DatabaseManager):
     """🧪 يختبر الحالة الأولية لقاعدة البيانات الفارغة."""
     assert db.get_latest_session_date() is None, "يجب أن تكون قاعدة البيانات فارغة في البداية"
     df, msg = db.load_latest_data()
-    assert "البيانات الأولية" in msg
-    assert len(db.load_all_historical_data()) == 0
+    assert "البيانات الأولية" in msg, "يجب أن تُرجع رسالة البيانات الأولية"
+    assert len(db.load_all_historical_data()) == 0, "يجب ألا تحتوي البيانات التاريخية على أي صفوف"
 
 def test_save_and_load_flow(db: DatabaseManager):
     """🧪 يختبر دورة الحياة الكاملة للحفظ والتحميل بشكل متسلسل."""
@@ -46,23 +49,25 @@ def test_save_and_load_flow(db: DatabaseManager):
     # 2. التحقق من البيانات بعد الحفظ الأول
     latest_df, _ = db.load_latest_data()
     historical_df = db.load_all_historical_data()
-    assert len(latest_df) == 2
-    assert len(historical_df) == 2
+    assert len(latest_df) == 2, "بعد الحفظ الأول، يجب أن تكون أحدث البيانات صفين"
+    assert len(historical_df) == 2, "بعد الحفظ الأول، يجب أن تكون البيانات التاريخية صفين"
     assert db.get_latest_session_date() == session_date1
 
     # 3. حفظ الدفعة الثانية من البيانات بتاريخ أحدث
     date2 = "2025-01-12"
     session_date2 = "12/01/2025"
     df2 = pd.DataFrame({
-        C.DATE_COLUMN_NAME: [date2], C.TENOR_COLUMN_NAME: [364],
-        C.YIELD_COLUMN_NAME: [27.0], C.SESSION_DATE_COLUMN_NAME: [session_date2],
+        C.DATE_COLUMN_NAME: [date2],
+        C.TENOR_COLUMN_NAME: [364],
+        C.YIELD_COLUMN_NAME: [27.0],
+        C.SESSION_DATE_COLUMN_NAME: [session_date2],
     })
     db.save_data(df2)
 
     # 4. التحقق من البيانات بعد الحفظ الثاني
     latest_df_2, _ = db.load_latest_data()
     historical_df_2 = db.load_all_historical_data()
-    assert len(latest_df_2) == 1, "يجب أن تحتوي أحدث البيانات على صف واحد فقط"
+    assert len(latest_df_2) == 1, "بعد الحفظ الثاني، يجب أن تكون أحدث البيانات صفًا واحدًا فقط"
     assert latest_df_2[C.TENOR_COLUMN_NAME].iloc[0] == 364
-    assert len(historical_df_2) == 3, "يجب أن تحتوي البيانات التاريخية على 3 صفوف"
+    assert len(historical_df_2) == 3, "يجب أن تحتوي البيانات التاريخية الآن على 3 صفوف"
     assert db.get_latest_session_date() == session_date2
