@@ -1,6 +1,11 @@
-# update_data.py
 import logging
 import sys
+import os
+import sentry_sdk
+from dotenv import load_dotenv
+
+# تحميل المتغيرات من ملف .env (للبيئة المحلية)
+load_dotenv()
 
 # هذا السطر يضمن أن السكربت يمكنه العثور على باقي ملفات المشروع
 # عند تشغيله من GitHub Actions
@@ -16,6 +21,16 @@ def run_update():
     """
     الدالة الرئيسية التي تقوم بتشغيل عملية تحديث البيانات.
     """
+    # --- START: Sentry Initialization ---
+    SENTRY_DSN = os.environ.get("SENTRY_DSN")
+    if SENTRY_DSN:
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            traces_sample_rate=1.0,
+            environment="production-cron", # بيئة مختلفة للتمييز
+        )
+    # --- END: Sentry Initialization ---
+
     # 1. إعداد نظام التسجيل (Logging) باستخدام الدالة المركزية
     setup_logging()
     logger = logging.getLogger(__name__)
