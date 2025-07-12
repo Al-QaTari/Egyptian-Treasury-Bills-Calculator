@@ -10,7 +10,7 @@ lxml==5.2.2
 Flask==3.0.3
 plotly==6.2.0
 requests==2.32.4
-sentry-sdk==2.1.1
+sentry-sdk==2.8.0       # <-- تم التحديث إلى إصدار آمن
 python-dotenv==1.0.1
 
 # Testing Libraries
