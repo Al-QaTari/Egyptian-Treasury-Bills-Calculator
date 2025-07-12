@@ -16,8 +16,9 @@ sys.path.append(os.getcwd())
 # 3. استيراد وحدات المشروع المحلية
 # نطلب من أداة الفحص تجاهل الخطأ E402 هنا لأنه ضروري لعمل الكود
 from cbe_scraper import fetch_data_from_cbe  # noqa: E402
-from db_manager import get_db_manager      # noqa: E402
-from utils import setup_logging            # noqa: E402
+from db_manager import get_db_manager  # noqa: E402
+from utils import setup_logging  # noqa: E402
+
 # --- نهاية كتلة الاستيراد والإعداد ---
 
 
