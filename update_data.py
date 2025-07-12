@@ -8,17 +8,16 @@ from dotenv import load_dotenv
 import sentry_sdk
 
 # --- الإعدادات الأولية ---
-# تحميل متغيرات البيئة من ملف .env أولاً
+# يجب تشغيل هذه الأوامر قبل استيراد وحدات المشروع
 load_dotenv()
-
-# تعديل مسار بايثون للسماح باستيراد ملفات المشروع المحلية.
-# هذا السطر ضروري ويجب أن يكون قبل استيراد وحدات مشروعك.
 sys.path.append(os.getcwd())
 
+
 # 3. استيراد وحدات المشروع المحلية
-from cbe_scraper import fetch_data_from_cbe
-from db_manager import get_db_manager
-from utils import setup_logging
+# نطلب من أداة الفحص تجاهل الخطأ E402 هنا لأنه ضروري لعمل الكود
+from cbe_scraper import fetch_data_from_cbe  # noqa: E402
+from db_manager import get_db_manager      # noqa: E402
+from utils import setup_logging            # noqa: E402
 # --- نهاية كتلة الاستيراد والإعداد ---
 
 
@@ -32,7 +31,7 @@ def run_update():
         sentry_sdk.init(
             dsn=sentry_dsn,
             traces_sample_rate=1.0,
-            environment="production-cron",  # بيئة مختلفة للتمييز
+            environment="production-cron",
         )
 
     # إعداد نظام التسجيل (Logging)
@@ -43,17 +42,12 @@ def run_update():
     logger.info("بدء عملية تحديث البيانات المجدولة...")
 
     try:
-        # الحصول على مدير قاعدة البيانات
         db_manager = get_db_manager()
-
-        # جلب البيانات من البنك المركزي المصري
         fetch_data_from_cbe(db_manager, status_callback=None)
-
         logger.info("اكتملت عملية تحديث البيانات بنجاح.")
 
     except Exception as e:
         logger.critical(f"فشل تحديث البيانات المجدول: {e}", exc_info=True)
-        # الخروج برمز خطأ (1) لإعلام GitHub Actions بفشل المهمة
         sys.exit(1)
     finally:
         logger.info("=" * 50)
