@@ -17,17 +17,20 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    
+    # --- START: تعديل لتمرير المفتاح السري ---
+    env:
+      SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+    # --- END: تعديل لتمرير المفتاح السري ---
 
     steps:
       - name: Check out repository
-        # ✅ التعديل: التحديث إلى أحدث إصدار
         uses: actions/checkout@v4
 
       - name: Set up Python
-        # ✅ التعديل: التحديث إلى أحدث إصدار
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # تم تحديثه ليتوافق مع workflow فحص الجودة
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
@@ -35,7 +38,6 @@ jobs:
           pip install -r requirements.txt
       
       - name: Run data update script
-        # ✅ التعديل: تشغيل السكربت الصحيح
         run: python update_data.py
 
       - name: Commit and push changes
