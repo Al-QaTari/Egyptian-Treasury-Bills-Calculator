@@ -4,6 +4,12 @@ import pandas as pd
 from datetime import datetime
 import plotly.express as px
 import time
+import os
+import sentry_sdk
+from dotenv import load_dotenv
+
+# تحميل المتغيرات من ملف .env (للبيئة المحلية)
+load_dotenv()
 
 from utils import prepare_arabic_text, load_css, format_currency
 from db_manager import get_db_manager
@@ -46,6 +52,16 @@ def display_auction_results(title: str, info: str, df: pd.DataFrame):
 
 
 def main():
+    # --- START: Sentry Initialization ---
+    SENTRY_DSN = os.environ.get("SENTRY_DSN")
+    if SENTRY_DSN:
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            traces_sample_rate=1.0,
+            environment="production-app",
+        )
+    # --- END: Sentry Initialization ---
+
     st.set_page_config(
         layout="wide",
         page_title=prepare_arabic_text("حاسبة أذون الخزانة"),
