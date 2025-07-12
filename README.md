@@ -81,7 +81,7 @@ streamlit run app.py
 
 ## 📂 هيكل المشروع
 ```
-Treasury_Calculator/
+Egyptian-Treasury-Bills-Calculator/
 │
 ├── .github/
 │   └── workflows/
