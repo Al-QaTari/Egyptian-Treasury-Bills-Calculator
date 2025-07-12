@@ -54,10 +54,10 @@
 #### 2️⃣ تثبيت المشروع
 ```bash
 # انسخ المستودع إلى جهازك
-git clone [https://github.com/Al-QaTari/Treasury_Calculator.git](https://github.com/Al-QaTari/Treasury_Calculator.git)
+git clone [https://github.com/Al-QaTari/Egyptian-Treasury-Bills-Calculator.git](https://github.com/Al-QaTari/Egyptian-Treasury-Bills-Calculator.git)
 
 # ادخل إلى مجلد المشروع
-cd Treasury_Calculator
+cd Egyptian-Treasury-Bills-Calculator
 
 # ثبّت جميع المكتبات المطلوبة
 pip install -r requirements.txt
