@@ -1,17 +1,23 @@
 # --- START: كل جمل الاستيراد مجمعة هنا ---
+# 1. مكتبات بايثون القياسية
 import logging
 import sys
 import os
+
+# 2. المكتبات الخارجية
 import sentry_sdk
 from dotenv import load_dotenv
 
+# 3. تعديل المسار (يجب أن يكون قبل استيراد ملفات المشروع)
 sys.path.append(".")
+
+# 4. استيراد ملفات المشروع
 from db_manager import get_db_manager
 from cbe_scraper import fetch_data_from_cbe
 from utils import setup_logging
 # --- END: كل جمل الاستيراد مجمعة هنا ---
 
-# استدعاء الدالة بعد الانتهاء من كل عمليات الاستيراد
+# 5. استدعاء الدالة بعد الانتهاء من كل عمليات الاستيراد
 load_dotenv()
 
 
@@ -29,7 +35,7 @@ def run_update():
         )
     # --- END: Sentry Initialization ---
 
-    # 1. إعداد نظام التسجيل (Logging) باستخدام الدالة المركزية
+    # إعداد نظام التسجيل (Logging) باستخدام الدالة المركزية
     setup_logging()
     logger = logging.getLogger(__name__)
 
@@ -37,10 +43,10 @@ def run_update():
     logger.info("Starting scheduled data update process...")
 
     try:
-        # 2. الحصول على مدير قاعدة البيانات عبر الدالة التي تدعم الكاش
+        # الحصول على مدير قاعدة البيانات عبر الدالة التي تدعم الكاش
         db_manager = get_db_manager()
 
-        # 3. استدعاء دالة الجلب مع تمرير None للكول باك الخاص بالواجهة
+        # استدعاء دالة الجلب مع تمرير None للكول باك الخاص بالواجهة
         fetch_data_from_cbe(db_manager, status_callback=None)
 
         logger.info("Data update process completed successfully.")
@@ -49,7 +55,7 @@ def run_update():
     except Exception as e:
         logger.critical(f"Scheduled data update FAILED: {e}", exc_info=True)
         logger.info("=" * 50)
-        # 4. الخروج برمز خطأ لإعلام GitHub Actions بفشل المهمة
+        # الخروج برمز خطأ لإعلام GitHub Actions بفشل المهمة
         sys.exit(1)
 
 
