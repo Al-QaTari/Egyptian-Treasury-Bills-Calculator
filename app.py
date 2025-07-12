@@ -1,3 +1,4 @@
+# --- START: كل جمل الاستيراد مجمعة هنا ---
 import streamlit as st
 import pytz
 import pandas as pd
@@ -8,14 +9,15 @@ import os
 import sentry_sdk
 from dotenv import load_dotenv
 
-# تحميل المتغيرات من ملف .env (للبيئة المحلية)
-load_dotenv()
-
 from utils import prepare_arabic_text, load_css, format_currency
 from db_manager import get_db_manager
 from calculations import calculate_primary_yield, analyze_secondary_sale
 from cbe_scraper import fetch_data_from_cbe
 import constants as C
+# --- END: كل جمل الاستيراد مجمعة هنا ---
+
+# استدعاء الدالة بعد الانتهاء من كل عمليات الاستيراد
+load_dotenv()
 
 
 def display_auction_results(title: str, info: str, df: pd.DataFrame):
