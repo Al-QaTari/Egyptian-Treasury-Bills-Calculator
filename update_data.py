@@ -1,20 +1,18 @@
+# --- START: كل جمل الاستيراد مجمعة هنا ---
 import logging
 import sys
 import os
 import sentry_sdk
 from dotenv import load_dotenv
 
-# تحميل المتغيرات من ملف .env (للبيئة المحلية)
-load_dotenv()
-
-# هذا السطر يضمن أن السكربت يمكنه العثور على باقي ملفات المشروع
-# عند تشغيله من GitHub Actions
 sys.path.append(".")
-
-# نستورد الدوال المحسنة من ملفات مشروعنا
 from db_manager import get_db_manager
 from cbe_scraper import fetch_data_from_cbe
 from utils import setup_logging
+# --- END: كل جمل الاستيراد مجمعة هنا ---
+
+# استدعاء الدالة بعد الانتهاء من كل عمليات الاستيراد
+load_dotenv()
 
 
 def run_update():
