@@ -1,62 +1,62 @@
-# --- START: كل جمل الاستيراد مجمعة هنا ---
-# 1. مكتبات بايثون القياسية
+# 1. استيراد المكتبات القياسية
 import logging
-import sys
 import os
+import sys
 
-# 2. المكتبات الخارجية
-import sentry_sdk
+# 2. استيراد المكتبات الخارجية (Third-party)
 from dotenv import load_dotenv
+import sentry_sdk
 
-# 3. تعديل المسار (يجب أن يكون قبل استيراد ملفات المشروع)
-sys.path.append(".")
-
-# 4. استيراد ملفات المشروع
-from db_manager import get_db_manager
-from cbe_scraper import fetch_data_from_cbe
-from utils import setup_logging
-# --- END: كل جمل الاستيراد مجمعة هنا ---
-
-# 5. استدعاء الدالة بعد الانتهاء من كل عمليات الاستيراد
+# --- الإعدادات الأولية ---
+# تحميل متغيرات البيئة من ملف .env أولاً
 load_dotenv()
+
+# تعديل مسار بايثون للسماح باستيراد ملفات المشروع المحلية.
+# هذا السطر ضروري ويجب أن يكون قبل استيراد وحدات مشروعك.
+sys.path.append(os.getcwd())
+
+# 3. استيراد وحدات المشروع المحلية
+from cbe_scraper import fetch_data_from_cbe
+from db_manager import get_db_manager
+from utils import setup_logging
+# --- نهاية كتلة الاستيراد والإعداد ---
 
 
 def run_update():
     """
-    الدالة الرئيسية التي تقوم بتشغيل عملية تحديث البيانات.
+    الدالة الرئيسية التي تقوم بتشغيل عملية تحديث البيانات وجلبها.
     """
-    # --- START: Sentry Initialization ---
-    SENTRY_DSN = os.environ.get("SENTRY_DSN")
-    if SENTRY_DSN:
+    # تهيئة Sentry لتتبع الأخطاء
+    sentry_dsn = os.environ.get("SENTRY_DSN")
+    if sentry_dsn:
         sentry_sdk.init(
-            dsn=SENTRY_DSN,
+            dsn=sentry_dsn,
             traces_sample_rate=1.0,
-            environment="production-cron", # بيئة مختلفة للتمييز
+            environment="production-cron",  # بيئة مختلفة للتمييز
         )
-    # --- END: Sentry Initialization ---
 
-    # إعداد نظام التسجيل (Logging) باستخدام الدالة المركزية
+    # إعداد نظام التسجيل (Logging)
     setup_logging()
     logger = logging.getLogger(__name__)
 
     logger.info("=" * 50)
-    logger.info("Starting scheduled data update process...")
+    logger.info("بدء عملية تحديث البيانات المجدولة...")
 
     try:
-        # الحصول على مدير قاعدة البيانات عبر الدالة التي تدعم الكاش
+        # الحصول على مدير قاعدة البيانات
         db_manager = get_db_manager()
 
-        # استدعاء دالة الجلب مع تمرير None للكول باك الخاص بالواجهة
+        # جلب البيانات من البنك المركزي المصري
         fetch_data_from_cbe(db_manager, status_callback=None)
 
-        logger.info("Data update process completed successfully.")
-        logger.info("=" * 50)
+        logger.info("اكتملت عملية تحديث البيانات بنجاح.")
 
     except Exception as e:
-        logger.critical(f"Scheduled data update FAILED: {e}", exc_info=True)
-        logger.info("=" * 50)
-        # الخروج برمز خطأ لإعلام GitHub Actions بفشل المهمة
+        logger.critical(f"فشل تحديث البيانات المجدول: {e}", exc_info=True)
+        # الخروج برمز خطأ (1) لإعلام GitHub Actions بفشل المهمة
         sys.exit(1)
+    finally:
+        logger.info("=" * 50)
 
 
 if __name__ == "__main__":
