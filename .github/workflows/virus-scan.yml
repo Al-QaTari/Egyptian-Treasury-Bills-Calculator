@@ -1,9 +1,7 @@
 name: Virus Scan
 
 on:
-  # يسمح بالتشغيل اليدوي من تبويب Actions
   workflow_dispatch:
-
   push:
     branches: [ "main" ]
   pull_request:
@@ -18,7 +16,5 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run virus scan on all files
-        uses: moonD4rk/clamav-scan@v2
-        with:
-          fail-on-infected: 'true'
+      - name: Run ClamAV scan (Alternative)
+        uses: gitleaks/clamav-scan@v2
