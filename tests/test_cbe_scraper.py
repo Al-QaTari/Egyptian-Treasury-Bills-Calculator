@@ -29,10 +29,10 @@ def test_html_parser_full_run():
 
     # --- START OF FIX ---
     # 1. نتأكد من وجود العمود المساعد الذي يحتوي على التواريخ المحولة
-    assert 'session_date_dt' in parsed_df.columns
+    assert "session_date_dt" in parsed_df.columns
 
     # 2. نتأكد من أن الكود اختار التاريخ الأحدث من بين التواريخ المتاحة
-    latest_date_from_df = parsed_df['session_date_dt'].max().strftime('%d/%m/%Y')
+    latest_date_from_df = parsed_df["session_date_dt"].max().strftime("%d/%m/%Y")
     assert latest_date_from_df == "11/07/2025"
     # --- END OF FIX ---
 
