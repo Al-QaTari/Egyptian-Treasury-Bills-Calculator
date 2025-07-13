@@ -23,4 +23,4 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run ClamAV scan (Alternative)
-        uses: gitleaks/clamav-scan@v2
+        uses: djdefi/gitavscan@main
