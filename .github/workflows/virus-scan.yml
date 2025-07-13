@@ -16,10 +16,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Step 2: Run virus scan using a valid action
-      # This is the corrected line
+      # Step 2: Run virus scan with the CORRECT action name
+      # The 'D' in moonD4rk must be capitalized
       - name: Run virus scan on all files
         uses: moonD4rk/clamav-scan@v2
         with:
-          # This option ensures the workflow fails if an infected file is found
           fail-on-infected: 'true'
