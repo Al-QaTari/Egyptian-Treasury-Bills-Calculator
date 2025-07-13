@@ -1,4 +1,4 @@
-# cbe_scraper.py
+# cbe_scraper.py (النسخة النهائية مع منطق محدث)
 import pandas as pd
 from io import StringIO
 from datetime import datetime
@@ -61,22 +61,35 @@ def parse_cbe_html(
 ) -> Optional[str | pd.DataFrame]:
     logger.info(f"Starting to parse HTML content. Quick check: {is_quick_check}")
     soup = BeautifulSoup(page_source, "lxml")
+
+    # --- START OF MODIFIED LOGIC ---
     if is_quick_check:
-        first_header = soup.find("h2", string=lambda t: "النتائج" in t if t else False)
-        if first_header:
-            results_table = first_header.find_next("table")
+        all_dates = []
+        results_headers = soup.find_all("h2", string=lambda t: "النتائج" in t if t else False)
+        for header in results_headers:
+            results_table = header.find_next("table")
             if results_table:
-                session_date_row = results_table.find(
-                    "td", string=lambda t: "تاريخ الجلسة" in t if t else False
-                )
+                session_date_row = results_table.find("td", string=lambda t: "تاريخ الجلسة" in t if t else False)
                 if session_date_row and session_date_row.find_next_sibling("td"):
-                    live_date = session_date_row.find_next_sibling("td").get_text(
-                        strip=True
-                    )
-                    logger.info(f"Quick check found live session date: {live_date}")
-                    return live_date
-        logger.warning("Quick check could not find a session date.")
+                    live_date_str = session_date_row.find_next_sibling("td").get_text(strip=True)
+                    try:
+                        # تحويل النص إلى كائن تاريخ للمقارنة
+                        date_obj = datetime.strptime(live_date_str, "%d/%m/%Y")
+                        all_dates.append(date_obj)
+                    except (ValueError, TypeError):
+                        logger.warning(f"Could not parse date: {live_date_str}")
+                        continue
+        
+        if all_dates:
+            # إرجاع التاريخ الأحدث فقط كنص
+            latest_date = max(all_dates)
+            latest_date_str = latest_date.strftime("%d/%m/%Y")
+            logger.info(f"Quick check found latest live session date: {latest_date_str}")
+            return latest_date_str
+
+        logger.warning("Quick check could not find any valid session dates.")
         return None
+    # --- END OF MODIFIED LOGIC ---
 
     results_headers = soup.find_all(
         lambda tag: tag.name == "h2" and "النتائج" in tag.get_text()
