@@ -1,9 +1,9 @@
-# cbe_scraper.py (النسخة النهائية مع منطق مبسط وموثوق)
+# cbe_scraper.py (النسخة النهائية النظيفة)
 import pandas as pd
 from io import StringIO
 from datetime import datetime
 from selenium import webdriver
-from selenium.common.exceptions import WebDriverException, TimeoutException
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
@@ -14,7 +14,6 @@ import logging
 import time
 from typing import Optional, List, Callable
 import platform
-import requests
 
 import constants as C
 from db_manager import DatabaseManager
@@ -72,20 +71,25 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
         try:
             results_df = pd.read_html(StringIO(str(results_table)))[0]
             tenors = pd.to_numeric(results_df.columns[1:], errors="coerce").dropna().astype(int).tolist()
-            if not tenors: continue
+            if not tenors:
+                continue
 
             session_date_row = results_df[results_df.iloc[:, 0] == "تاريخ الجلسة"]
-            if session_date_row.empty: continue
+            if session_date_row.empty:
+                continue
             session_dates = session_date_row.iloc[0, 1 : len(tenors) + 1].tolist()
 
             accepted_bids_header = header.find_next(lambda tag: tag.name in ["p", "strong"] and C.ACCEPTED_BIDS_KEYWORD in tag.get_text())
-            if not accepted_bids_header: continue
+            if not accepted_bids_header:
+                continue
             accepted_bids_table = accepted_bids_header.find_next("table")
-            if not accepted_bids_table: continue
+            if not accepted_bids_table:
+                continue
 
             accepted_df = pd.read_html(StringIO(str(accepted_bids_table)))[0]
             yield_row = accepted_df[accepted_df.iloc[:, 0].str.contains(C.YIELD_ANCHOR_TEXT, na=False)]
-            if yield_row.empty: continue
+            if yield_row.empty:
+                continue
 
             yields = pd.to_numeric(yield_row.iloc[0, 1 : len(tenors) + 1], errors="coerce").dropna().astype(float).tolist()
 
@@ -100,21 +104,18 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
             logger.error(f"Error processing a section: {e}", exc_info=True)
             continue
             
-    if not all_dataframes: return None
+    if not all_dataframes:
+        return None
 
     final_df = pd.concat(all_dataframes, ignore_index=True)
     final_df[C.DATE_COLUMN_NAME] = datetime.now().strftime("%Y-%m-%d")
     final_df = final_df.sort_values(by=C.TENOR_COLUMN_NAME).reset_index(drop=True)
-    
-    # تحويل التواريخ للمقارنة الصحيحة
     final_df['session_date_dt'] = pd.to_datetime(final_df[C.SESSION_DATE_COLUMN_NAME], format='%d/%m/%Y', errors='coerce')
-
     logger.info(f"Successfully parsed a total of {len(final_df)} tenors from the page.")
     return final_df
 
 
 def fetch_data_from_cbe(db_manager: DatabaseManager, status_callback: Optional[Callable[[str], None]] = None) -> None:
-    # --- START OF FINAL SIMPLIFIED LOGIC ---
     retries = C.SCRAPER_RETRIES
     delay_seconds = C.SCRAPER_RETRY_DELAY_SECONDS
 
@@ -122,15 +123,19 @@ def fetch_data_from_cbe(db_manager: DatabaseManager, status_callback: Optional[C
         driver = None
         logger.info(f"--- Starting FULL scrape attempt {attempt + 1} of {retries} ---")
         try:
-            if status_callback: status_callback(f"محاولة ({attempt + 1}/{retries}): جاري إعداد المتصفح...")
+            if status_callback:
+                status_callback(f"محاولة ({attempt + 1}/{retries}): جاري إعداد المتصفح...")
             driver = setup_driver()
-            if not driver: raise RuntimeError("فشل إعداد المتصفح. لا يمكن المتابعة.")
+            if not driver:
+                raise RuntimeError("فشل إعداد المتصفح. لا يمكن المتابعة.")
 
-            if status_callback: status_callback(f"محاولة ({attempt + 1}/{retries}): جاري الاتصال بموقع البنك...")
+            if status_callback:
+                status_callback(f"محاولة ({attempt + 1}/{retries}): جاري الاتصال بموقع البنك...")
             driver.get(C.CBE_DATA_URL)
             WebDriverWait(driver, C.SCRAPER_TIMEOUT_SECONDS).until(EC.presence_of_element_located((By.TAG_NAME, "h2")))
 
-            if status_callback: status_callback(f"محاولة ({attempt + 1}/{retries}): تم الاتصال، جاري تحليل المحتوى...")
+            if status_callback:
+                status_callback(f"محاولة ({attempt + 1}/{retries}): تم الاتصال، جاري تحليل المحتوى...")
             page_source = driver.page_source
             verify_page_structure(page_source)
             
@@ -144,39 +149,43 @@ def fetch_data_from_cbe(db_manager: DatabaseManager, status_callback: Optional[C
                 logger.info(f"Latest date found on page: {live_latest_date_str}")
                 logger.info(f"Latest date in DB: {db_session_date_str}")
                 
-                # قارن فقط بعد الجلب الكامل والناجح
                 if db_session_date_str and live_latest_date_str == db_session_date_str:
                     logger.info("No new data found after full scrape. Data is up-to-date.")
-                    if status_callback: status_callback("البيانات محدثة بالفعل. لا حاجة للحفظ.")
+                    if status_callback:
+                        status_callback("البيانات محدثة بالفعل. لا حاجة للحفظ.")
                     time.sleep(2)
-                    return # الخروج بنجاح
+                    return
 
-                if status_callback: status_callback(f"محاولة ({attempt + 1}/{retries}): تم العثور على بيانات جديدة، جاري الحفظ...")
+                if status_callback:
+                    status_callback(f"محاولة ({attempt + 1}/{retries}): تم العثور على بيانات جديدة، جاري الحفظ...")
                 
-                # إزالة العمود المساعد قبل الحفظ
                 final_df = final_df.drop(columns=['session_date_dt'])
                 
                 db_manager.save_data(final_df)
                 logger.info("Data successfully scraped and saved.")
-                if status_callback: status_callback("اكتمل تحديث البيانات بنجاح!")
-                return # الخروج بنجاح
+                if status_callback:
+                    status_callback("اكتمل تحديث البيانات بنجاح!")
+                return
             else:
                 logger.error("Full parsing failed. No data was saved for this attempt.")
 
         except TimeoutException:
             logger.warning(f"Page load timed out on attempt {attempt + 1}.", exc_info=True)
-            if status_callback: status_callback(f"فشلت المحاولة {attempt + 1}: استغرق تحميل الصفحة وقتاً طويلاً.")
+            if status_callback:
+                status_callback(f"فشلت المحاولة {attempt + 1}: استغرق تحميل الصفحة وقتاً طويلاً.")
         except Exception as e:
             logger.error(f"An unexpected error occurred during full scrape attempt {attempt + 1}: {e}", exc_info=True)
-            if status_callback: status_callback(f"فشلت المحاولة {attempt + 1}: {e}")
+            if status_callback:
+                status_callback(f"فشلت المحاولة {attempt + 1}: {e}")
         finally:
-            if driver: driver.quit()
+            if driver:
+                driver.quit()
 
         if attempt < retries - 1:
             logger.info(f"Waiting for {delay_seconds} seconds before next attempt...")
-            if status_callback: status_callback(f"ستتم إعادة المحاولة بعد {delay_seconds} ثانية...")
+            if status_callback:
+                status_callback(f"ستتم إعادة المحاولة بعد {delay_seconds} ثانية...")
             time.sleep(delay_seconds)
 
     logger.critical(f"All {retries} attempts to fetch data from CBE failed.")
     raise RuntimeError(f"فشلت جميع المحاولات ({retries}) لجلب البيانات من البنك المركزي.")
-    # --- END OF FINAL SIMPLIFIED LOGIC ---
