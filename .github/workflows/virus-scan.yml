@@ -1,0 +1,31 @@
+name: Virus Scan
+
+# ---- TRIGGER RULES ----
+# هذا القسم يحدد متى يتم تشغيل الفحص
+on:
+  # 1. عند رفع أي كود جديد (push) إلى الفرع الرئيسي (main)
+  push:
+    branches: [ "main" ]
+    
+  # 2. عند فتح طلب دمج (pull request) يستهدف الفرع الرئيسي
+  pull_request:
+    branches: [ "main" ]
+
+# ---- JOB DEFINITION ----
+# هذا القسم يصف المهمة التي سيتم تنفيذها
+jobs:
+  scan:
+    name: ClamAV Virus Scan
+    runs-on: ubuntu-latest # استخدم أحدث نسخة من Ubuntu
+
+    steps:
+      # الخطوة 1: سحب الكود من المستودع
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # الخطوة 2: تشغيل فحص الفيروسات على كل الملفات
+      - name: Run virus scan on all files
+        uses: secure-workflows/clamav-scan-action@v1
+        with:
+          # هذا الخيار يضمن فشل سير العمل إذا تم العثور على أي ملف مصاب
+          fail_on_infected: true
