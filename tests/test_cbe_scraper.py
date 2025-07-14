@@ -27,14 +27,12 @@ def test_html_parser_full_run():
     assert isinstance(parsed_df, pd.DataFrame)
     assert len(parsed_df) == 4
 
-    # --- START OF FIX ---
     # 1. نتأكد من وجود العمود المساعد الذي يحتوي على التواريخ المحولة
     assert "session_date_dt" in parsed_df.columns
 
     # 2. نتأكد من أن الكود اختار التاريخ الأحدث من بين التواريخ المتاحة
     latest_date_from_df = parsed_df["session_date_dt"].max().strftime("%d/%m/%Y")
     assert latest_date_from_df == "11/07/2025"
-    # --- END OF FIX ---
 
     # 3. نتأكد من أن باقي قيم العوائد صحيحة
     parsed_df[C.TENOR_COLUMN_NAME] = pd.to_numeric(parsed_df[C.TENOR_COLUMN_NAME])
