@@ -1,4 +1,4 @@
-# cbe_scraper.py (النسخة النهائية مع إصلاح منطق المرور على كل الجداول)
+# cbe_scraper.py (النسخة النهائية مع إزالة الاستيراد غير المستخدم)
 import pandas as pd
 from io import StringIO
 from datetime import datetime
@@ -12,7 +12,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import logging
 import time
-from typing import Optional, List, Callable
+from typing import Optional, Callable  # <-- تم حذف List من هنا
 import platform
 
 import constants as C
@@ -59,7 +59,6 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
     logger.info("Starting to parse HTML content using the final robust logic.")
     soup = BeautifulSoup(page_source, "lxml")
 
-    # --- START OF FINAL PARSING LOGIC ---
     try:
         results_headers = soup.find_all(
             lambda tag: tag.name == "h2" and "النتائج" in tag.get_text()
@@ -134,7 +133,7 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
                 all_dataframes.append(section_df)
 
         if not all_dataframes:
-            logger.error("Could not parse any valid data from any section.")
+            logger.error("Could not parse any valid data from any of the sections.")
             return None
 
         final_df = pd.concat(all_dataframes, ignore_index=True)
@@ -143,7 +142,6 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
             final_df[C.SESSION_DATE_COLUMN_NAME], format="%d/%m/%Y", errors="coerce"
         )
 
-        # التأكد من عدم وجود تكرار لنفس الأجل، مع الإبقاء على الأحدث
         final_df = (
             final_df.sort_values("session_date_dt", ascending=False)
             .drop_duplicates(subset=[C.TENOR_COLUMN_NAME])
@@ -156,13 +154,11 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
     except Exception as e:
         logger.error(f"A critical error occurred during parsing: {e}", exc_info=True)
         return None
-    # --- END OF FINAL PARSING LOGIC ---
 
 
 def fetch_data_from_cbe(
     db_manager: DatabaseManager, status_callback: Optional[Callable[[str], None]] = None
 ) -> None:
-    # الكود هنا لم يتغير، لأنه يعتمد على `parse_cbe_html` التي قمنا بإصلاحها
     retries = C.SCRAPER_RETRIES
     delay_seconds = C.SCRAPER_RETRY_DELAY_SECONDS
 
