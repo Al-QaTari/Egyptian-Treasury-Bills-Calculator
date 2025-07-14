@@ -1,4 +1,4 @@
-# cbe_scraper.py (النسخة النهائية الكاملة والموثوقة)
+# cbe_scraper.py (النسخة النهائية مع إصلاح منطق المرور على كل الجداول)
 import pandas as pd
 from io import StringIO
 from datetime import datetime
@@ -56,95 +56,113 @@ def verify_page_structure(page_source: str) -> None:
 
 
 def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
-    logger.info("Starting to parse HTML content using the robust logic.")
+    logger.info("Starting to parse HTML content using the final robust logic.")
     soup = BeautifulSoup(page_source, "lxml")
 
+    # --- START OF FINAL PARSING LOGIC ---
     try:
-        results_header = soup.find(
+        results_headers = soup.find_all(
             lambda tag: tag.name == "h2" and "النتائج" in tag.get_text()
         )
-        if not results_header:
-            logger.error(
-                "Parse Error: Could not find the main 'النتائج' (Results) header."
+        if not results_headers:
+            logger.error("Parse Error: Could not find any 'النتائج' (Results) headers.")
+            return None
+
+        all_dataframes = []
+
+        for header in results_headers:
+            dates_table = header.find_next("table")
+            if not dates_table:
+                logger.warning(
+                    "Found a 'Results' header but no subsequent table. Skipping section."
+                )
+                continue
+
+            dates_df = pd.read_html(StringIO(str(dates_table)))[0]
+            tenors = (
+                pd.to_numeric(dates_df.columns[1:], errors="coerce")
+                .dropna()
+                .astype(int)
+                .tolist()
             )
-            return None
+            session_dates_row = dates_df[dates_df.iloc[:, 0] == "تاريخ الجلسة"]
 
-        dates_table = results_header.find_next("table")
-        if not dates_table:
-            logger.error("Could not find the session dates table.")
-            return None
+            if session_dates_row.empty or not tenors:
+                logger.warning(
+                    "Could not find 'تاريخ الجلسة' row or tenors. Skipping section."
+                )
+                continue
+            session_dates = session_dates_row.iloc[0, 1 : len(tenors) + 1].tolist()
 
-        dates_df = pd.read_html(StringIO(str(dates_table)))[0]
-        tenors = (
-            pd.to_numeric(dates_df.columns[1:], errors="coerce")
-            .dropna()
-            .astype(int)
-            .tolist()
-        )
-        session_dates_row = dates_df[dates_df.iloc[:, 0] == "تاريخ الجلسة"]
-        if session_dates_row.empty:
-            logger.error("Could not find 'تاريخ الجلسة' row in the dates table.")
-            return None
-        session_dates = session_dates_row.iloc[0, 1 : len(tenors) + 1].tolist()
-
-        dates_tenors_df = pd.DataFrame(
-            {C.TENOR_COLUMN_NAME: tenors, C.SESSION_DATE_COLUMN_NAME: session_dates}
-        )
-
-        accepted_bids_header = soup.find(
-            lambda tag: tag.name in ["p", "strong"]
-            and C.ACCEPTED_BIDS_KEYWORD in tag.get_text()
-        )
-        if not accepted_bids_header:
-            logger.error("Could not find the 'العروض المقبولة' header.")
-            return None
-
-        yields_table = accepted_bids_header.find_next("table")
-        if not yields_table:
-            logger.error(
-                "Could not find the yields table after the accepted bids header."
+            dates_tenors_df = pd.DataFrame(
+                {C.TENOR_COLUMN_NAME: tenors, C.SESSION_DATE_COLUMN_NAME: session_dates}
             )
-            return None
 
-        yields_df_raw = pd.read_html(StringIO(str(yields_table)))[0]
-        yields_df_raw.columns = ["البيان"] + tenors
-
-        yield_row = yields_df_raw[
-            yields_df_raw.iloc[:, 0].str.contains(C.YIELD_ANCHOR_TEXT, na=False)
-        ]
-        if yield_row.empty:
-            logger.error(
-                "Could not find 'متوسط العائد المرجح' row in the yields table."
+            accepted_bids_header = header.find_next(
+                lambda tag: tag.name in ["p", "strong"]
+                and C.ACCEPTED_BIDS_KEYWORD in tag.get_text()
             )
+            if not accepted_bids_header:
+                logger.warning(
+                    "Could not find 'العروض المقبولة' header. Skipping section."
+                )
+                continue
+
+            yields_table = accepted_bids_header.find_next("table")
+            if not yields_table:
+                logger.warning("Could not find yields table. Skipping section.")
+                continue
+
+            yields_df_raw = pd.read_html(StringIO(str(yields_table)))[0]
+            yields_df_raw.columns = ["البيان"] + tenors
+
+            yield_row = yields_df_raw[
+                yields_df_raw.iloc[:, 0].str.contains(C.YIELD_ANCHOR_TEXT, na=False)
+            ]
+            if yield_row.empty:
+                logger.warning(
+                    "Could not find 'متوسط العائد المرجح' row. Skipping section."
+                )
+                continue
+
+            yield_series = yield_row.iloc[0, 1:].astype(float)
+            yield_series.name = C.YIELD_COLUMN_NAME
+
+            section_df = dates_tenors_df.join(yield_series, on=C.TENOR_COLUMN_NAME)
+
+            if not section_df[C.YIELD_COLUMN_NAME].isnull().any():
+                all_dataframes.append(section_df)
+
+        if not all_dataframes:
+            logger.error("Could not parse any valid data from any section.")
             return None
 
-        yield_series = yield_row.iloc[0, 1:].astype(float)
-        yield_series.name = C.YIELD_COLUMN_NAME
-
-        final_df = dates_tenors_df.join(yield_series, on=C.TENOR_COLUMN_NAME)
-
-        if final_df[C.YIELD_COLUMN_NAME].isnull().any():
-            logger.error("Data merge failed, resulting in NaN values for yields.")
-            return None
-
+        final_df = pd.concat(all_dataframes, ignore_index=True)
         final_df[C.DATE_COLUMN_NAME] = datetime.now().strftime("%Y-%m-%d")
         final_df["session_date_dt"] = pd.to_datetime(
             final_df[C.SESSION_DATE_COLUMN_NAME], format="%d/%m/%Y", errors="coerce"
+        )
+
+        # التأكد من عدم وجود تكرار لنفس الأجل، مع الإبقاء على الأحدث
+        final_df = (
+            final_df.sort_values("session_date_dt", ascending=False)
+            .drop_duplicates(subset=[C.TENOR_COLUMN_NAME])
+            .sort_values(by=C.TENOR_COLUMN_NAME)
         )
 
         logger.info(f"Successfully parsed and merged data for {len(final_df)} tenors.")
         return final_df
 
     except Exception as e:
-        logger.error(
-            f"A critical error occurred during parsing logic: {e}", exc_info=True
-        )
+        logger.error(f"A critical error occurred during parsing: {e}", exc_info=True)
         return None
+    # --- END OF FINAL PARSING LOGIC ---
 
 
 def fetch_data_from_cbe(
     db_manager: DatabaseManager, status_callback: Optional[Callable[[str], None]] = None
 ) -> None:
+    # الكود هنا لم يتغير، لأنه يعتمد على `parse_cbe_html` التي قمنا بإصلاحها
     retries = C.SCRAPER_RETRIES
     delay_seconds = C.SCRAPER_RETRY_DELAY_SECONDS
 
