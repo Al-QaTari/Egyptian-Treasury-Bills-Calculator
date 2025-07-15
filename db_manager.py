@@ -1,4 +1,4 @@
-# db_manager.py (النسخة المصححة لاجتياز الاختبارات)
+# db_manager.py (النسخة النهائية والمصححة لاجتياز كل الاختبارات)
 import sqlite3
 import pandas as pd
 import os
@@ -62,36 +62,41 @@ class DatabaseManager:
             logger.error(f"Failed to save data to database: {e}", exc_info=True)
 
     def _upsert(self, table, conn, keys, data_iter):
-        # الكائن 'conn' الذي يتم تمريره هو بالفعل المؤشر، لذلك نستخدمه مباشرة
         cursor = conn
         for data in data_iter:
             placeholders = ", ".join("?" * len(data))
             sql = f"INSERT OR REPLACE INTO {table.name} ({', '.join(keys)}) VALUES ({placeholders})"
             cursor.execute(sql, data)
 
-    # --- بداية الإصلاح: تم حذف @st.cache_data من هنا ---
+    # --- بداية الإصلاح النهائي ---
     def load_latest_data(
         self,
     ) -> Tuple[pd.DataFrame, Tuple[Optional[str], Optional[str]]]:
-        # --- نهاية الإصلاح ---
         logger.info("Loading latest data from the database.")
         try:
-            with sqlite3.connect(self.db_filename) as conn:
-                query = f"""
-                WITH RankedData AS (
-                    SELECT *,
-                           ROW_NUMBER() OVER(PARTITION BY "{C.TENOR_COLUMN_NAME}" ORDER BY "{C.DATE_COLUMN_NAME}" DESC) as rn,
-                           MAX("{C.DATE_COLUMN_NAME}") OVER () as max_scrape_date
-                    FROM "{C.TABLE_NAME}"
-                )
-                SELECT "{C.TENOR_COLUMN_NAME}", "{C.YIELD_COLUMN_NAME}", "{C.SESSION_DATE_COLUMN_NAME}", max_scrape_date
-                FROM RankedData
-                WHERE rn = 1;
-                """
-                df = pd.read_sql_query(query, conn)
+            # الخطوة 1: الحصول على تاريخ أحدث جلسة
+            latest_session_date = self.get_latest_session_date()
 
-                if not df.empty:
-                    last_update_dt_utc = pd.to_datetime(df["max_scrape_date"].iloc[0])
+            if not latest_session_date:
+                return pd.DataFrame(), ("البيانات الأولية", None)
+
+            with sqlite3.connect(self.db_filename) as conn:
+                # الخطوة 2: اختيار كل الصفوف التي تطابق هذا التاريخ فقط
+                query = f"""
+                SELECT "{C.TENOR_COLUMN_NAME}", "{C.YIELD_COLUMN_NAME}", "{C.SESSION_DATE_COLUMN_NAME}"
+                FROM "{C.TABLE_NAME}"
+                WHERE "{C.SESSION_DATE_COLUMN_NAME}" = ?
+                """
+                df = pd.read_sql_query(query, conn, params=(latest_session_date,))
+
+                # الخطوة 3: الحصول على تاريخ آخر تحديث بشكل منفصل
+                scrape_date_query = f'SELECT MAX("{C.DATE_COLUMN_NAME}") FROM "{C.TABLE_NAME}"'
+                max_scrape_date_str = pd.read_sql_query(
+                    scrape_date_query, conn
+                ).iloc[0, 0]
+
+                if not df.empty and max_scrape_date_str:
+                    last_update_dt_utc = pd.to_datetime(max_scrape_date_str)
                     cairo_tz = pytz.timezone(C.TIMEZONE)
                     last_update_dt_cairo = last_update_dt_utc.tz_localize(
                         "UTC"
@@ -100,17 +105,15 @@ class DatabaseManager:
                     last_update_date = last_update_dt_cairo.strftime("%Y-%m-%d")
                     last_update_time = last_update_dt_cairo.strftime("%I:%M %p")
 
-                    df = df.drop(columns=["max_scrape_date"])
                     return df, (last_update_date, last_update_time)
 
                 return pd.DataFrame(), ("البيانات الأولية", None)
         except Exception as e:
             logger.warning(f"Could not load latest data (table might be empty): {e}")
-            return pd.DataFrame(C.INITIAL_DATA), ("البيانات الأولية", None)
+            return pd.DataFrame(), ("البيانات الأولية", None)
+    # --- نهاية الإصلاح النهائي ---
 
-    # --- بداية الإصلاح: تم حذف @st.cache_data من هنا ---
     def load_all_historical_data(self) -> pd.DataFrame:
-        # --- نهاية الإصلاح ---
         logger.info("Loading all historical data from the database.")
         try:
             with sqlite3.connect(self.db_filename) as conn:
