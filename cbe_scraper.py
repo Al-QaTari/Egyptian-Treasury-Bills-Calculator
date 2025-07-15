@@ -14,7 +14,7 @@ import logging
 import time
 from typing import Optional, Callable
 import pytz
-import os  # تمت إضافة هذه المكتبة
+import os
 
 import constants as C
 from db_manager import DatabaseManager
@@ -34,20 +34,13 @@ def setup_driver() -> Optional[webdriver.Chrome]:
     options.add_argument("--window-size=1920,1080")
     options.add_argument(f"user-agent={C.USER_AGENT}")
 
-    # إعدادات لإسكات سجلات المتصفح
     options.add_argument("--log-level=3")
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
     try:
-        # --- بداية التعديل الجديد: إسكات سجلات خدمة التشغيل ---
-        # هذا السطر يوجه مخرجات الدرايفر إلى اللا شيء
         log_path = os.devnull
         service = Service(ChromeDriverManager().install(), log_output=log_path)
-        # --- نهاية التعديل الجديد ---
-
         driver = webdriver.Chrome(service=service, options=options)
-
-        # تم تعديل رسالة السجل لتعكس الوضع الجديد
         logger.info("Selenium driver initialized successfully in full silent mode.")
         return driver
     except Exception as e:
@@ -146,6 +139,11 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
         )
 
         logger.info(f"Successfully parsed and merged data for {len(final_df)} tenors.")
+
+        # --- بداية الإصلاح: حذف العمود المساعد قبل إرجاع البيانات ---
+        final_df = final_df.drop(columns=["session_date_dt"])
+        # --- نهاية الإصلاح ---
+
         return final_df
 
     except Exception as e:
@@ -190,12 +188,17 @@ def fetch_data_from_cbe(
             final_df = parse_cbe_html(page_source)
 
             if final_df is not None and not final_df.empty:
+                # --- START: Refactored logic to use the already parsed df ---
+                # No need to re-parse or re-calculate latest date here.
+                # The logic inside parse_cbe_html already handles de-duplication
+                # and ensures we have a clean DataFrame of the latest auction(s).
+
                 db_session_date_str = db_manager.get_latest_session_date()
-                live_latest_date = final_df["session_date_dt"].max()
-                live_latest_date_str = live_latest_date.strftime("%d/%m/%Y")
+                live_latest_date_str = final_df[C.SESSION_DATE_COLUMN_NAME].iloc[0]
 
                 logger.info(f"Latest date found on page: {live_latest_date_str}")
                 logger.info(f"Latest date in DB: {db_session_date_str}")
+                # --- END: Refactored logic ---
 
                 if db_session_date_str and live_latest_date_str == db_session_date_str:
                     logger.info(
@@ -210,8 +213,6 @@ def fetch_data_from_cbe(
                     status_callback(
                         f"محاولة ({attempt + 1}/{retries}): تم العثور على بيانات جديدة، جاري الحفظ..."
                     )
-
-                final_df = final_df.drop(columns=["session_date_dt"])
 
                 db_manager.save_data(final_df)
                 logger.info("Data successfully scraped and saved.")
