@@ -1,7 +1,9 @@
-# calculations.py (النسخة المحسنة مع validation أفضل)
+import logging
 from typing import Dict, Any
 
 import constants as C
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_primary_yield(
@@ -19,26 +21,30 @@ def calculate_primary_yield(
     Returns:
         A dictionary with detailed calculation results or an error message.
     """
-    # --- IMPROVED VALIDATION ---
+    logger.debug(
+        f"Calculating primary yield with: face_value={face_value}, "
+        f"yield_rate={yield_rate}, tenor={tenor}, tax_rate={tax_rate}"
+    )
+
     if face_value <= 0 or yield_rate <= 0 or tenor <= 0:
-        return {"error": "القيمة الإسمية، العائد، والمدة يجب أن تكون أرقامًا موجبة."}
+        error_msg = "القيمة الإسمية، العائد، والمدة يجب أن تكون أرقامًا موجبة."
+        logger.warning(f"Validation failed: {error_msg}")
+        return {"error": error_msg}
     if not 0 <= tax_rate <= 100:
-        return {"error": "نسبة الضريبة يجب أن تكون بين 0 و 100."}
+        error_msg = "نسبة الضريبة يجب أن تكون بين 0 و 100."
+        logger.warning(f"Validation failed: {error_msg}")
+        return {"error": error_msg}
 
-    # This calculation reflects the discount instrument nature of T-bills
     purchase_price = face_value / (1 + (yield_rate / 100.0 * tenor / C.DAYS_IN_YEAR))
-
     gross_return = face_value - purchase_price
     tax_amount = gross_return * (tax_rate / 100.0)
     net_return = gross_return - tax_amount
-
-    # Real profit percentage is the net return over the actual amount paid
     real_profit_percentage = (
         (net_return / purchase_price) * 100 if purchase_price > 0 else 0
     )
 
-    return {
-        "error": None,  # Add error key for consistency
+    result = {
+        "error": None,
         "purchase_price": purchase_price,
         "gross_return": gross_return,
         "tax_amount": tax_amount,
@@ -46,6 +52,9 @@ def calculate_primary_yield(
         "total_payout": face_value,
         "real_profit_percentage": real_profit_percentage,
     }
+
+    logger.info(f"Primary yield calculated successfully. Net return: {net_return:.2f}")
+    return result
 
 
 def analyze_secondary_sale(
@@ -70,48 +79,49 @@ def analyze_secondary_sale(
     Returns:
         A dictionary with the analysis results or an error message.
     """
-    # --- IMPROVED VALIDATION (arranged from basic to logical) ---
+    logger.debug(
+        f"Analyzing secondary sale with inputs: face_value={face_value}, "
+        f"original_yield={original_yield}, original_tenor={original_tenor}, "
+        f"holding_days={holding_days}, secondary_yield={secondary_yield}, tax_rate={tax_rate}"
+    )
+
     if (
         face_value <= 0
         or original_yield <= 0
         or original_tenor <= 0
         or secondary_yield <= 0
     ):
-        return {"error": "جميع المدخلات الرقمية يجب أن تكون أرقامًا موجبة."}
+        error_msg = "جميع المدخلات الرقمية يجب أن تكون أرقامًا موجبة."
+        logger.warning(f"Validation failed: {error_msg}")
+        return {"error": error_msg}
 
     if not 0 <= tax_rate <= 100:
-        return {"error": "نسبة الضريبة يجب أن تكون بين 0 و 100."}
+        error_msg = "نسبة الضريبة يجب أن تكون بين 0 و 100."
+        logger.warning(f"Validation failed: {error_msg}")
+        return {"error": error_msg}
 
     if not 1 <= holding_days < original_tenor:
-        return {
-            "error": "أيام الاحتفاظ يجب أن تكون أكبر من صفر وأقل من أجل الإذن الأصلي."
-        }
+        error_msg = "أيام الاحتفاظ يجب أن تكون أكبر من صفر وأقل من أجل الإذن الأصلي."
+        logger.warning(f"Validation failed: {error_msg}")
+        return {"error": error_msg}
 
-    # Price you paid initially
     original_purchase_price = face_value / (
         1 + (original_yield / 100.0 * original_tenor / C.DAYS_IN_YEAR)
     )
-
-    # Price you sell at today
     remaining_days = original_tenor - holding_days
     sale_price = face_value / (
         1 + (secondary_yield / 100.0 * remaining_days / C.DAYS_IN_YEAR)
     )
-
     gross_profit = sale_price - original_purchase_price
-    tax_amount = max(
-        0, gross_profit * (tax_rate / 100.0)
-    )  # Tax is only on positive profit
+    tax_amount = max(0, gross_profit * (tax_rate / 100.0))
     net_profit = gross_profit - tax_amount
-
-    # Actual yield for the period you held the T-bill
     period_yield = (
         (net_profit / original_purchase_price) * 100
         if original_purchase_price > 0
         else 0
     )
 
-    return {
+    result = {
         "error": None,
         "original_purchase_price": original_purchase_price,
         "sale_price": sale_price,
@@ -120,3 +130,6 @@ def analyze_secondary_sale(
         "net_profit": net_profit,
         "period_yield": period_yield,
     }
+
+    logger.info(f"Secondary sale analyzed successfully. Net profit: {net_profit:.2f}")
+    return result
