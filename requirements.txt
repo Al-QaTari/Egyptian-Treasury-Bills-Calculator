@@ -1,7 +1,6 @@
 streamlit==1.46.0
 pandas==2.3.1
 selenium==4.22.0
-webdriver-manager==4.0.1  # تمت إضافة هذه المكتبة الهامة
 pytz==2024.1
 beautifulsoup4==4.12.3
 lxml==5.2.2
