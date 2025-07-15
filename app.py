@@ -14,25 +14,6 @@ from calculations import calculate_primary_yield, analyze_secondary_sale
 from cbe_scraper import fetch_data_from_cbe
 import constants as C
 
-
-# --- بداية التعديل: تغيير اسم الدالة لتعكس المنطق الجديد ---
-def calculate_yield_from_investment(
-    investment_amount: float, yield_rate: float, tenor: int, tax_rate: float
-):
-    """
-    يحسب القيمة الاسمية والأرباح بناءً على مبلغ الاستثمار الأولي.
-    """
-    # هذه المعادلة هي عكس المعادلة الأصلية
-    face_value = investment_amount * (1 + (yield_rate / 100.0 * tenor / C.DAYS_IN_YEAR))
-    # تقريب القيمة الاسمية لأقرب مضاعف لـ 25000
-    face_value = round(face_value / 25000) * 25000
-
-    # الآن نستخدم القيمة الاسمية الجديدة لحساب باقي القيم بنفس الطريقة الأصلية
-    return calculate_primary_yield(face_value, yield_rate, tenor, tax_rate)
-
-
-# --- نهاية التعديل ---
-
 # إعدادات أولية
 setup_logging(level=logging.WARNING)
 load_dotenv()
@@ -60,7 +41,7 @@ def display_auction_results(title: str, info: str, df: pd.DataFrame):
             unsafe_allow_html=True,
         )
 
-        info_with_note = f"{info}<br><small>للشراء يتطلب التواجد في البنك قبل الساعة 10 صباحًا.</small>"
+        info_with_note = f"{info}<br><small>للشراء يتطلب التواجد في البنك قبل الساعة 10 صباحًا في يوم العطاء.</small>"
         st.markdown(
             f"""
             <div style="text-align: center; padding: 0.75rem; background-color: rgba(38, 39, 48, 0.5); border-radius: 0.5rem; border: 1px solid #3c4049; margin-top: 10px; margin-bottom: 20px;">
@@ -80,7 +61,7 @@ def display_auction_results(title: str, info: str, df: pd.DataFrame):
                     )
                     value = f"{tenor_data[C.YIELD_COLUMN_NAME]:.3f}%"
                     card_html = f"""
-                    <div style="background-color: #2c3e50; border: 1px solid #4a6fa5; border-radius: 8px; padding: 18px; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);">
+                    <div style="background-color: #2c3e50; border: 1px solid #4a6fa5; border-radius: 5px; padding: 15px; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);">
                         <p style="font-size: 1.1rem; color: #bdc3c7; margin: 0 0 8px 0; font-weight: 500;">{label}</p>
                         <p style="font-size: 2rem; font-weight: 700; color: #ffffff; margin: 0; line-height: 1.1;">{value}</p>
                     </div>
@@ -255,15 +236,13 @@ def main():
         with st.container(border=True):
             st.subheader(prepare_arabic_text("1. أدخل بيانات الاستثمار"), anchor=False)
 
-            # --- بداية التعديل: تغيير منطق الإدخال ---
             investment_amount_main = st.number_input(
-                prepare_arabic_text("المبلغ الذي تريد استثماره"),  # تم تغيير العنوان
+                prepare_arabic_text("المبلغ المراد استثماره (القيمة الإسمية)"),
                 min_value=C.MIN_T_BILL_AMOUNT,
                 value=C.MIN_T_BILL_AMOUNT,
                 step=C.T_BILL_AMOUNT_STEP,
-                help="أدخل المبلغ الذي تريد استثماره، وسيتم حساب القيمة الاسمية والأرباح.",
+                help="أدخل القيمة التي ستحصل عليها في نهاية المدة، وعادة ما تكون من مضاعفات 25,000 جنيه.",
             )
-            # --- نهاية التعديل ---
 
             options = (
                 sorted(data_df[C.TENOR_COLUMN_NAME].unique())
@@ -315,14 +294,12 @@ def main():
                 if selected_tenor_main is not None:
                     yield_rate = get_yield_for_tenor(selected_tenor_main)
                     if yield_rate is not None and not data_df.empty:
-                        # --- بداية التعديل: استخدام الدالة الجديدة ---
-                        results_dict = calculate_yield_from_investment(
+                        results_dict = calculate_primary_yield(
                             investment_amount_main,
                             yield_rate,
                             selected_tenor_main,
                             tax_rate_main,
                         )
-                        # --- نهاية التعديل ---
                         if not results_dict.get("error"):
                             results_dict["tenor"] = selected_tenor_main
                             results_dict["tax_rate"] = tax_rate_main
@@ -354,16 +331,19 @@ def main():
                         anchor=False,
                     )
                     st.markdown(
-                        f"""<div style="text-align: center; margin-bottom: 20px;"><p style="font-size: 1.1rem; color: #adb5bd; margin-bottom: 0px;">{prepare_arabic_text("النسبة الفعلية للربح (عن الفترة)")}</p><p style="font-size: 2.8rem; color: #ffffff; font-weight: 700; line-height: 1.2;">{results['real_profit_percentage']:.3f}%</p></div>""",
+                        f"""<div style="text-align: center; margin-bottom: 20px;"><p style="font-size: 1.1rem; color: #adb5bd; margin-bottom: 0px;">{prepare_arabic_text("النسبة الفعلية للربح (عن الفترة)")}</p><p style="font-size: 2.8rem; color: #ffc107; font-weight: 700; line-height: 1.2;">{results['real_profit_percentage']:.3f}%</p></div>""",
                         unsafe_allow_html=True,
                     )
                     st.markdown(
                         f"""<div style="text-align: center; background-color: #495057; padding: 10px; border-radius: 10px; margin-bottom: 15px;"><p style="font-size: 1rem; color: #adb5bd; margin-bottom: 0px;">{prepare_arabic_text("💰 صافي الربح المقدم")} </p><p style="font-size: 1.9rem; color: #28a745; font-weight: 600; line-height: 1.2;">{format_currency(results['net_return'])}</p></div>""",
                         unsafe_allow_html=True,
                     )
-                    final_balance = results["total_payout"] + results["net_return"]
+
+                    # --- بداية التعديل المطلوب ---
+                    # هذا الصندوق يعرض (القيمة الإسمية + الربح الصافي)
+                    total_value = results["total_payout"] + results["net_return"]
                     st.markdown(
-                        f"""<div style="text-align: center; background-color: #212529; padding: 10px; border-radius: 10px; "><p style="font-size: 1rem; color: #adb5bd; margin-bottom: 0px;">{prepare_arabic_text("🏦 الرصيد النهائي المتوقع (في حال عدم سحب الربح)")}</p><p style="font-size: 1.9rem; color: #8ab4f8; font-weight: 600; line-height: 1.2;">{format_currency(final_balance)}</p></div>""",
+                        f"""<div style="text-align: center; background-color: #212529; padding: 10px; border-radius: 10px; "><p style="font-size: 1rem; color: #adb5bd; margin-bottom: 0px;">{prepare_arabic_text("المبلغ النهائي بعد الأرباح")}</p><p style="font-size: 1.9rem; color: #8ab4f8; font-weight: 600; line-height: 1.2;">{format_currency(total_value)}</p></div>""",
                         unsafe_allow_html=True,
                     )
 
@@ -374,7 +354,7 @@ def main():
                     ):
                         st.markdown(
                             f"""<div style="padding: 10px; border-radius: 10px; background-color: #212529;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 5px; border-bottom: 1px solid #495057;"><span style="font-size: 1.1rem;">{prepare_arabic_text("القيمة الإسمية المحسوبة")}</span><span style="font-size: 1.2rem; font-weight: 600;">{format_currency(results['total_payout'])}</span></div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 5px; border-bottom: 1px solid #495057;"><span style="font-size: 1.1rem;">{prepare_arabic_text("سعر الشراء الفعلي (المبلغ المستثمر)")}</span><span style="font-size: 1.2rem; font-weight: 600;">{format_currency(results['purchase_price'])}</span></div>
                             <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 5px; border-bottom: 1px solid #495057;"><span style="font-size: 1.1rem;">{prepare_arabic_text("العائد الإجمالي (قبل الضريبة)")}</span><span style="font-size: 1.2rem; font-weight: 600; color: #8ab4f8;">{format_currency(results['gross_return'])}</span></div>
                             <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 5px;"><span style="font-size: 1.1rem;">{prepare_arabic_text(f"قيمة الضريبة المستحقة ({results['tax_rate']}%)")}</span><span style="font-size: 1.2rem; font-weight: 600; color: #dc3545;">{format_currency(results['tax_amount'])}</span></div>
                             </div>""",
@@ -388,7 +368,7 @@ def main():
                     )
                     st.info(
                         prepare_arabic_text(
-                            """**💡 آلية صرف العوائد والضريبة:**\n- **العائد الإجمالي (قبل الضريبة)** يُضاف إلى حسابك مقدمًا في يوم الشراء.\n- في نهاية المدة، تسترد **القيمة الإسمية الكاملة**.\n- **قيمة الضريبة** يتم خصمها من حسابك في تاريخ الاستحقاق. **لذا، يجب التأكد من وجود هذا المبلغ في حسابك لتجنب أي مشاكل.**"""
+                            """**💡 آلية صرف العوائد والضريبة:**\n- **العائد الإجمالي (قبل الضريبة)** يُضاف إلى حسابك مقدمًا في يوم الشراء.\n- في نهاية المدة، تسترد **القيمة الإسمية الكاملة**.\n- **قيمة الضريبة** يتم خصمها من حسابك في تاريخ الاستحقاق. **لذا، يجب التأكد من وجود هذا المبلغ في حسابك لتجنب أي  خصم من المبلغ الأساسي.**"""
                         ),
                         icon="💡",
                     )
@@ -649,6 +629,9 @@ def main():
             f"""<div style='text-align: center; background-color: #212529; padding: 10px; border-radius: 10px; margin-top:10px;'><p style="font-size: 1rem; color: #adb5bd; margin-bottom: 0px;">{prepare_arabic_text("الخصم الربع سنوي التقريبي")}</p><p style="font-size: 1.5rem; color: #ffc107; font-weight: 600; line-height: 1.2;">{format_currency(quarterly_deduction)}</p></div>""",
             unsafe_allow_html=True,
         )
+
+        st.divider()
+
         st.markdown(
             prepare_arabic_text(
                 "\n\n***إخلاء مسؤولية:*** *هذا التطبيق هو أداة استرشادية فقط. للحصول على أرقام نهائية ودقيقة، يرجى الرجوع إلى البنك أو المؤسسة المالية التي تتعامل معها.*"
