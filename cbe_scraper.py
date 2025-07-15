@@ -1,4 +1,5 @@
 # cbe_scraper.py (النسخة النهائية والنظيفة)
+import os
 import pandas as pd
 from io import StringIO
 from datetime import datetime
@@ -16,8 +17,6 @@ import logging
 import time
 from typing import Optional, Callable
 import pytz
-
-# import os <-- تم حذفه
 import platform
 
 import constants as C
