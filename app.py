@@ -1,4 +1,3 @@
-# --- START: كل جمل الاستيراد مجمعة هنا ---
 import streamlit as st
 import pytz
 import pandas as pd
@@ -6,19 +5,31 @@ from datetime import datetime
 import plotly.express as px
 import time
 import os
-import sentry_sdk
 from dotenv import load_dotenv
+import sentry_sdk
 
-from utils import prepare_arabic_text, load_css, format_currency
+# استيراد الوحدات النمطية الخاصة بالمشروع
+from utils import setup_logging, prepare_arabic_text, load_css, format_currency
 from db_manager import get_db_manager
 from calculations import calculate_primary_yield, analyze_secondary_sale
 from cbe_scraper import fetch_data_from_cbe
 import constants as C
 
-# --- END: كل جمل الاستيراد مجمعة هنا ---
-
-# استدعاء الدالة بعد الانتهاء من كل عمليات الاستيراد
+# إعدادات أولية
+setup_logging()
 load_dotenv()
+
+# --- بداية الإضافة: تهيئة Sentry لمراقبة التطبيق ---
+# نستلهم هذا الكود من ملف update_data.py
+sentry_dsn = os.environ.get("SENTRY_DSN")
+if sentry_dsn:
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        traces_sample_rate=1.0,
+        # تمييز الأخطاء القادمة من تطبيق Streamlit
+        environment="production-streamlit",
+    )
+# --- نهاية الإضافة ---
 
 
 def display_auction_results(title: str, info: str, df: pd.DataFrame):
@@ -31,48 +42,60 @@ def display_auction_results(title: str, info: str, df: pd.DataFrame):
             f"<h5 style='text-align: center; color:#ffc107; margin-bottom: 10px;'>{prepare_arabic_text(f'{title} - {session_date_str}')}</h5>",
             unsafe_allow_html=True,
         )
-        st.info(prepare_arabic_text(info), icon="🗓️")
-
-        cols = st.columns(len(df))
-        df_sorted = df.sort_values(by=C.TENOR_COLUMN_NAME)
-        for i, (_, tenor_data) in enumerate(df_sorted.iterrows()):
-            with cols[i]:
-                rate = tenor_data[C.YIELD_COLUMN_NAME]
-                tenor = tenor_data[C.TENOR_COLUMN_NAME]
-                st.markdown(
-                    f"""
-                    <div style="text-align: center; background-color: #495057; padding: 8px 5px; border-radius: 10px; height: 100%;">
-                        <p style="font-size: 0.9rem; color: #adb5bd; margin: 0; white-space: nowrap;">{prepare_arabic_text(f"أجل {tenor} يوم")}</p>
-                        <p style="font-size: 1.5rem; color: #ffffff; font-weight: 600; margin: 5px 0 0 0;">{rate:.3f}%</p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+        info_with_note = f"{info}<br><small>للشراء يتطلب التواجد في البنك قبل الساعة 10 صباحًا.</small>"
         st.markdown(
-            "<hr style='margin-top: 25px; margin-bottom: 25px; border-color: #2d333b; border-style: dashed;'>",
+            f"""
+            <div style="text-align: center; padding: 0.75rem; background-color: rgba(38, 39, 48, 0.5); border-radius: 0.5rem; border: 1px solid #3c4049; margin-top: 10px; margin-bottom: 20px;">
+                🗓️ {prepare_arabic_text(info_with_note)}
+            </div>
+            """,
             unsafe_allow_html=True,
         )
 
+        df_sorted = df.sort_values(by=C.TENOR_COLUMN_NAME)
+        if len(df_sorted) > 0:
+            cols = st.columns(len(df_sorted))
+            for i, (_, tenor_data) in enumerate(df_sorted.iterrows()):
+                with cols[i]:
+                    label = prepare_arabic_text(
+                        f"أجل {tenor_data[C.TENOR_COLUMN_NAME]} يوم"
+                    )
+                    value = f"{tenor_data[C.YIELD_COLUMN_NAME]:.3f}%"
+                    card_html = f"""
+                    <div style="background-color: #2c3e50; border: 1px solid #4a6fa5; border-radius: 8px; padding: 18px; text-align: center; height: 100%; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);">
+                        <p style="font-size: 1.1rem; color: #bdc3c7; margin: 0 0 8px 0; font-weight: 500;">{label}</p>
+                        <p style="font-size: 2rem; font-weight: 700; color: #ffffff; margin: 0; line-height: 1.1;">{value}</p>
+                    </div>
+                    """
+                    st.markdown(card_html, unsafe_allow_html=True)
+
 
 def main():
-    # --- START: Sentry Initialization ---
-    SENTRY_DSN = os.environ.get("SENTRY_DSN")
-    if SENTRY_DSN:
-        sentry_sdk.init(
-            dsn=SENTRY_DSN,
-            traces_sample_rate=1.0,
-            environment="production-app",
-        )
-    # --- END: Sentry Initialization ---
-
     st.set_page_config(
         layout="wide",
         page_title=prepare_arabic_text("حاسبة أذون الخزانة"),
         page_icon="🏦",
     )
+
+    st.markdown(
+        """
+        <head>
+            <link rel="preconnect" href="https://fonts.googleapis.com">
+            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+            <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap">
+        </head>
+        """,
+        unsafe_allow_html=True,
+    )
+
     load_css(C.CSS_FILE_PATH)
 
     db_manager = get_db_manager()
+
+    if "primary_results" not in st.session_state:
+        st.session_state.primary_results = None
+    if "secondary_results" not in st.session_state:
+        st.session_state.secondary_results = None
 
     if "df_data" not in st.session_state:
         st.session_state.df_data, st.session_state.last_update = (
@@ -82,7 +105,7 @@ def main():
         st.session_state.historical_df = db_manager.load_all_historical_data()
 
     data_df = st.session_state.df_data
-    last_update = st.session_state.last_update
+    last_update_text = st.session_state.last_update
     historical_df = st.session_state.historical_df
 
     st.markdown(
@@ -90,16 +113,12 @@ def main():
     <div class="centered-header" style="background-color: #343a40; padding: 20px 10px; border-radius: 15px; margin-bottom: 1rem; box-shadow: 0 4px 12px 0 rgba(0,0,0,0.1);">
         <h1 style="color: #ffffff; margin: 0; font-size: 2.5rem;">{prepare_arabic_text(C.APP_TITLE)}</h1>
         <p style="color: #aab8c2; margin: 10px 0 0 0; font-size: 1.1rem;">{prepare_arabic_text(C.APP_HEADER)}</p>
-        <div style="margin-top: 20px; font-size: 1rem; color: #999; text-align: center;">
-            {prepare_arabic_text("صُمم وبُرمج بواسطة")} 
-            <span style="font-weight: bold; color: #00bfff;">{C.AUTHOR_NAME}</span>
-        </div>
     </div>
     """,
         unsafe_allow_html=True,
     )
 
-    top_col1, top_col2 = st.columns([2, 1])
+    top_col1, top_col2 = st.columns([2, 1], gap="large")
 
     with top_col1:
         with st.container(border=True):
@@ -109,47 +128,32 @@ def main():
                 unsafe_allow_html=True,
             )
 
-            if not data_df.empty and "البيانات الأولية" not in last_update:
+            if not data_df.empty and "البيانات الأولية" not in last_update_text:
                 try:
-                    data_df["session_datetime"] = pd.to_datetime(
-                        data_df[C.SESSION_DATE_COLUMN_NAME],
-                        format="%d/%m/%Y",
-                        errors="coerce",
-                    )
-                    day_names_en = {
-                        0: "Monday",
-                        1: "Tuesday",
-                        2: "Wednesday",
-                        3: "Thursday",
-                        4: "Friday",
-                        5: "Saturday",
-                        6: "Sunday",
-                    }
-                    data_df["day_name_en"] = data_df[
-                        "session_datetime"
-                    ].dt.dayofweek.map(day_names_en)
-
-                    sunday_df = data_df[data_df["day_name_en"] == "Sunday"]
-                    thursday_df = data_df[data_df["day_name_en"] == "Thursday"]
+                    sunday_df = data_df[data_df[C.TENOR_COLUMN_NAME].isin([91, 273])]
+                    thursday_df = data_df[data_df[C.TENOR_COLUMN_NAME].isin([182, 364])]
 
                     display_auction_results(
-                        title="نتائج عطاء الخميس",
-                        info="آجال (6 أشهر وسنة) - التنفيذ الفعلي يوم الثلاثاء التالي.",
-                        df=thursday_df,
+                        "عطاء الخميس",
+                        "آجال (6 أشهر و 12 شهر) - التنفيذ الفعلي يوم الثلاثاء التالي.",
+                        thursday_df,
+                    )
+
+                    st.markdown(
+                        "<hr style='margin: 1.5rem 0; border-color: #2d333b; border-style: dashed;'>",
+                        unsafe_allow_html=True,
                     )
 
                     display_auction_results(
-                        title="نتائج عطاء الأحد",
-                        info="آجال (3 و 9 أشهر) - التنفيذ الفعلي يوم الثلاثاء التالي.",
-                        df=sunday_df,
+                        "عطاء الأحد",
+                        "آجال (3 أشهر و 9 أشهر) - التنفيذ الفعلي يوم الثلاثاء التالي.",
+                        sunday_df,
                     )
 
-                    if sunday_df.empty and thursday_df.empty:
-                        st.info(
-                            prepare_arabic_text(
-                                "لا توجد بيانات عطاءات حديثة ليومي الأحد والخميس."
-                            )
-                        )
+                    st.markdown(
+                        "<hr style='margin: 1.5rem 0; border-color: #2d333b; border-style: dashed;'>",
+                        unsafe_allow_html=True,
+                    )
 
                 except Exception as e:
                     st.error(f"حدث خطأ أثناء معالجة البيانات: {e}")
@@ -161,72 +165,72 @@ def main():
     with top_col2:
         with st.container(border=True):
             st.subheader(prepare_arabic_text("📡 حالة البيانات"), anchor=False)
-            st.write(
-                f"{prepare_arabic_text('**آخر تحديث:**')} {prepare_arabic_text(last_update)}"
+
+            date_str, time_str = (
+                last_update_text
+                if isinstance(last_update_text, tuple)
+                else (last_update_text, None)
+            )
+
+            st.markdown(
+                f"""
+            <div style="text-align: center; padding: 10px; border: 1px solid #495057; border-radius: 10px; background-color: #212529; margin-bottom: 1rem;">
+                <p style="font-size: 0.9rem; margin-bottom: 5px; color: #adb5bd;">آخر تحديث للبيانات</p>
+                <p style="font-size: 1.4rem; font-weight: bold; color: #ffffff; margin: 0;">{prepare_arabic_text(date_str)}</p>
+                {f'<p style="font-size: 1.1rem; color: #adb5bd; margin: 0;">{prepare_arabic_text(time_str)}</p>' if time_str else ''}
+            </div>
+            """,
+                unsafe_allow_html=True,
             )
 
             if st.button(
-                prepare_arabic_text("🔄 تحديث البيانات"),
-                use_container_width=True,
+                " تحديث البيانات الآن 🔄",
                 type="primary",
+                use_container_width=True,
+                help="قد تستغرق هذه العملية دقيقة أو اثنتين.",
             ):
-                status_placeholder = st.empty()
+                progress_bar = st.progress(0, text="...بدء عملية التحديث")
+                status_text = st.empty()
 
-                def update_status(message):
-                    status_placeholder.markdown(
-                        f"""<div style="padding: 1rem; border-radius: 0.5rem; background-color: rgba(144, 238, 144, 0.1); border: 1px solid #2e7d32; color: #e0e0e0; margin-bottom: 1rem;">⏳ {prepare_arabic_text(message)}</div>""",
-                        unsafe_allow_html=True,
-                    )
+                progress_map = {
+                    "إعداد المتصفح": 10,
+                    "الاتصال بموقع البنك": 30,
+                    "تحليل المحتوى": 60,
+                    "العثور على بيانات جديدة": 80,
+                    "اكتمل": 100,
+                    "محدثة بالفعل": 100,
+                }
+
+                def update_progress(status: str):
+                    progress_value = 0
+                    progress_key = "جاري المعالجة..."
+                    for key, value in progress_map.items():
+                        if key in status:
+                            progress_value = value
+                            progress_key = status
+                            break
+
+                    status_text.info(f"الحالة: {progress_key}")
+                    progress_bar.progress(progress_value, text=progress_key)
 
                 try:
-                    update_status("جاري تهيئة عملية التحديث...")
-                    fetch_data_from_cbe(db_manager, status_callback=update_status)
-                    (
-                        st.session_state.df_data,
-                        st.session_state.last_update,
-                    ) = db_manager.load_latest_data()
-                    st.session_state.historical_df = (
-                        db_manager.load_all_historical_data()
-                    )
-                    status_placeholder.empty()
-                    st.toast(prepare_arabic_text("تم تحديث البيانات بنجاح!"), icon="✅")
-                    time.sleep(0.1)
+                    fetch_data_from_cbe(db_manager, status_callback=update_progress)
+                    progress_bar.progress(100, text="اكتمل التحديث!")
+                    st.success("تم تحديث البيانات بنجاح!")
+                    time.sleep(2)
                     st.rerun()
                 except Exception as e:
-                    status_placeholder.empty()
-                    st.error(prepare_arabic_text(f"⚠️ حدث خطأ: {e}"), icon="⚠️")
+                    progress_bar.empty()
+                    status_text.empty()
+                    st.error(f"فشل التحديث: {e}")
 
-            if "البيانات الأولية" in last_update:
-                st.warning(
-                    prepare_arabic_text("قاعدة البيانات فارغة. قم بتحديث البيانات."),
-                    icon="⏳",
-                )
-            else:
-                try:
-                    last_update_dt = datetime.strptime(
-                        last_update.replace(prepare_arabic_text("بتاريخ "), ""),
-                        "%d-%m-%Y",
-                    )
-                    if (
-                        datetime.now(pytz.timezone(C.TIMEZONE)).date()
-                        - last_update_dt.date()
-                    ).days > 0:
-                        st.info("ℹ️ الأسعار المعروضة هي لآخر عطاء منشور رسميًا.")
-                    else:
-                        st.success(
-                            prepare_arabic_text("البيانات المعروضة محدثة لليوم."),
-                            icon="✅",
-                        )
-                except (ValueError, TypeError):
-                    pass
             st.link_button(
-                prepare_arabic_text("🔗 فتح موقع البنك"),
-                C.CBE_DATA_URL,
-                use_container_width=True,
+                "🔗 فتح موقع البنك المركزي", C.CBE_DATA_URL, use_container_width=True
             )
 
     st.divider()
     st.header(prepare_arabic_text(C.PRIMARY_CALCULATOR_TITLE))
+
     col_form_main, col_results_main = st.columns(2, gap="large")
 
     with col_form_main:
@@ -237,6 +241,7 @@ def main():
                 min_value=C.MIN_T_BILL_AMOUNT,
                 value=C.MIN_T_BILL_AMOUNT,
                 step=C.T_BILL_AMOUNT_STEP,
+                help="المبلغ الذي تستثمره بالإضافة إلى الربح، وعادة ما يكون من مضاعفات 25,000 جنيه.",
             )
 
             options = (
@@ -266,6 +271,7 @@ def main():
                 prepare_arabic_text("اختر مدة الاستحقاق"),
                 formatted_options,
                 key="main_tenor_formatted",
+                help="اختر مدة الإذن التي ترغب في حساب عائدها.",
             )
             selected_tenor_main = (
                 int(selected_option.split(" ")[0]) if selected_option else None
@@ -277,95 +283,93 @@ def main():
                 value=C.DEFAULT_TAX_RATE_PERCENT,
                 step=0.5,
                 format="%.1f",
+                help="ضريبة الأرباح على أذون الخزانة، حالياً 20%.",
             )
-            calculate_button_main = st.button(
+
+            if st.button(
                 prepare_arabic_text("احسب العائد الآن"),
                 use_container_width=True,
                 type="primary",
-            )
+            ):
+                if selected_tenor_main is not None:
+                    yield_rate = get_yield_for_tenor(selected_tenor_main)
+                    if yield_rate is not None and not data_df.empty:
+                        results_dict = calculate_primary_yield(
+                            investment_amount_main,
+                            yield_rate,
+                            selected_tenor_main,
+                            tax_rate_main,
+                        )
+                        results_dict["tenor"] = selected_tenor_main
+                        results_dict["tax_rate"] = tax_rate_main
 
-    results_placeholder_main = col_results_main.empty()
-    if calculate_button_main and selected_tenor_main is not None:
-        try:
-            if data_df.empty:
-                with results_placeholder_main.container(border=True):
+                        st.session_state.primary_results = results_dict
+                    else:
+                        st.session_state.primary_results = "error_no_data"
+                else:
+                    st.session_state.primary_results = None
+
+    with col_results_main:
+        if st.session_state.primary_results:
+            if st.session_state.primary_results == "error_no_data":
+                with st.container(border=True):
                     st.error(
                         prepare_arabic_text(
                             "لا توجد بيانات للعائد. يرجى تحديث البيانات أولاً."
                         )
                     )
             else:
-                yield_rate = get_yield_for_tenor(selected_tenor_main)
-                if yield_rate is not None:
-                    results = calculate_primary_yield(
-                        investment_amount_main,
-                        yield_rate,
-                        selected_tenor_main,
-                        tax_rate_main,
+                results = st.session_state.primary_results
+                with st.container(border=True):
+                    st.subheader(
+                        prepare_arabic_text(
+                            f"✨ ملخص استثمارك لأجل {results['tenor']} يوم"
+                        ),
+                        anchor=False,
                     )
-                    with results_placeholder_main.container(border=True):
-                        st.subheader(
-                            prepare_arabic_text(
-                                f"✨ ملخص استثمارك لأجل {selected_tenor_main} يوم"
-                            ),
-                            anchor=False,
-                        )
+                    st.markdown(
+                        f"""<div style="text-align: center; margin-bottom: 20px;"><p style="font-size: 1.1rem; color: #adb5bd; margin-bottom: 0px;">{prepare_arabic_text("النسبة الفعلية للربح (عن الفترة)")}</p><p style="font-size: 2.8rem; color: #ffffff; font-weight: 700; line-height: 1.2;">{results['real_profit_percentage']:.3f}%</p></div>""",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(
+                        f"""<div style="text-align: center; background-color: #495057; padding: 10px; border-radius: 10px; margin-bottom: 15px;"><p style="font-size: 1rem; color: #adb5bd; margin-bottom: 0px;">{prepare_arabic_text("💰 صافي الربح المقدم")} </p><p style="font-size: 1.9rem; color: #28a745; font-weight: 600; line-height: 1.2;">{format_currency(results['net_return'])}</p></div>""",
+                        unsafe_allow_html=True,
+                    )
+                    final_balance = results["total_payout"] + results["net_return"]
+                    st.markdown(
+                        f"""<div style="text-align: center; background-color: #212529; padding: 10px; border-radius: 10px; "><p style="font-size: 1rem; color: #adb5bd; margin-bottom: 0px;">{prepare_arabic_text("🏦 الرصيد النهائي المتوقع (في حال عدم سحب الربح)")}</p><p style="font-size: 1.9rem; color: #8ab4f8; font-weight: 600; line-height: 1.2;">{format_currency(final_balance)}</p></div>""",
+                        unsafe_allow_html=True,
+                    )
+                    with st.expander(
+                        prepare_arabic_text("عرض تفاصيل الحساب الكاملة"), expanded=False
+                    ):
                         st.markdown(
-                            f"""<div style="text-align: center; margin-bottom: 20px;"><p style="font-size: 1.1rem; color: #adb5bd; margin-bottom: 0px;">{prepare_arabic_text("النسبة الفعلية للربح (عن الفترة)")}</p><p style="font-size: 2.8rem; color: #ffffff; font-weight: 700; line-height: 1.2;">{results['real_profit_percentage']:.3f}%</p></div>""",
+                            f"""<div style="padding: 10px; border-radius: 10px; background-color: #212529;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 5px; border-bottom: 1px solid #495057;"><span style="font-size: 1.1rem;">{prepare_arabic_text("سعر الشراء الفعلي")}</span><span style="font-size: 1.2rem; font-weight: 600;">{format_currency(results['purchase_price'])}</span></div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 5px; border-bottom: 1px solid #495057;"><span style="font-size: 1.1rem;">{prepare_arabic_text("العائد الإجمالي (قبل الضريبة)")}</span><span style="font-size: 1.2rem; font-weight: 600; color: #8ab4f8;">{format_currency(results['gross_return'])}</span></div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 5px;"><span style="font-size: 1.1rem;">{prepare_arabic_text(f"قيمة الضريبة المستحقة ({results['tax_rate']}%)")}</span><span style="font-size: 1.2rem; font-weight: 600; color: #dc3545;">{format_currency(results['tax_amount'])}</span></div>
+                            </div>""",
                             unsafe_allow_html=True,
                         )
-                        st.markdown(
-                            f"""<div style="text-align: center; background-color: #495057; padding: 10px; border-radius: 10px; margin-bottom: 15px;"><p style="font-size: 1rem; color: #adb5bd; margin-bottom: 0px;">{prepare_arabic_text("💰 صافي الربح المقدم")} </p><p style="font-size: 1.9rem; color: #28a745; font-weight: 600; line-height: 1.2;">{format_currency(results['net_return'])}</p></div>""",
-                            unsafe_allow_html=True,
-                        )
-                        final_balance = results["total_payout"] + results["net_return"]
-                        st.markdown(
-                            f"""<div style="text-align: center; background-color: #212529; padding: 10px; border-radius: 10px; "><p style="font-size: 1rem; color: #adb5bd; margin-bottom: 0px;">{prepare_arabic_text("🏦 الرصيد النهائي المتوقع (في حال عدم سحب الربح)")}</p><p style="font-size: 1.9rem; color: #8ab4f8; font-weight: 600; line-height: 1.2;">{format_currency(final_balance)}</p></div>""",
-                            unsafe_allow_html=True,
-                        )
-                        with st.expander(
-                            prepare_arabic_text("عرض تفاصيل الحساب الكاملة"),
-                            expanded=False,
-                        ):
-                            st.markdown(
-                                f"""<div style="padding: 10px; border-radius: 10px; background-color: #212529;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 5px; border-bottom: 1px solid #495057;"><span style="font-size: 1.1rem;">{prepare_arabic_text("سعر الشراء الفعلي")}</span><span style="font-size: 1.2rem; font-weight: 600;">{format_currency(results['purchase_price'])}</span></div>
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 5px; border-bottom: 1px solid #495057;"><span style="font-size: 1.1rem;">{prepare_arabic_text("العائد الإجمالي (قبل الضريبة)")}</span><span style="font-size: 1.2rem; font-weight: 600; color: #8ab4f8;">{format_currency(results['gross_return'])}</span></div>
-                                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 5px;"><span style="font-size: 1.1rem;">{prepare_arabic_text(f"قيمة الضريبة المستحقة ({tax_rate_main}%)")}</span><span style="font-size: 1.2rem; font-weight: 600; color: #dc3545;">{format_currency(results['tax_amount'])}</span></div>
-                                </div>""",
-                                unsafe_allow_html=True,
-                            )
-                        st.markdown(
-                            "<div style='margin-top: 15px;'></div>",
-                            unsafe_allow_html=True,
-                        )
-                        st.info(
-                            prepare_arabic_text(
-                                """**💡 آلية صرف العوائد والضريبة:**\n- **العائد الإجمالي (قبل الضريبة)** يُضاف إلى حسابك مقدمًا في يوم الشراء.\n- في نهاية المدة، تسترد **القيمة الإسمية الكاملة**.\n- **قيمة الضريبة** يتم خصمها من حسابك في تاريخ الاستحقاق. **لذا، يجب التأكد من وجود هذا المبلغ في حسابك لتجنب أي مشاكل.**"""
-                            ),
-                            icon="💡",
-                        )
-                else:
-                    with results_placeholder_main.container(border=True):
-                        st.error(
-                            prepare_arabic_text("لم يتم العثور على عائد للأجل المحدد.")
-                        )
-        except Exception as e:
-            with results_placeholder_main.container(border=True):
-                st.error(
-                    prepare_arabic_text(f"حدث خطأ غير متوقع أثناء الحساب: {e}"),
-                    icon="🚨",
+                    st.markdown(
+                        "<div style='margin-top: 15px;'></div>", unsafe_allow_html=True
+                    )
+                    st.info(
+                        prepare_arabic_text(
+                            """**💡 آلية صرف العوائد والضريبة:**\n- **العائد الإجمالي (قبل الضريبة)** يُضاف إلى حسابك مقدمًا في يوم الشراء.\n- في نهاية المدة، تسترد **القيمة الإسمية الكاملة**.\n- **قيمة الضريبة** يتم خصمها من حسابك في تاريخ الاستحقاق. **لذا، يجب التأكد من وجود هذا المبلغ في حسابك لتجنب أي مشاكل.**"""
+                        ),
+                        icon="💡",
+                    )
+        else:
+            with st.container(border=True):
+                st.info(
+                    "✨ ستظهر نتائج الحساب هنا بعد إدخال البيانات والضغط على زر الحساب.",
+                    icon="💡",
                 )
-    else:
-        with results_placeholder_main.container(border=True):
-            st.info(
-                prepare_arabic_text(
-                    "✨ ملخص استثمارك سيظهر هنا بتصميم أنيق بعد الضغط على زر الحساب."
-                )
-            )
 
     st.divider()
     st.header(prepare_arabic_text(C.SECONDARY_CALCULATOR_TITLE))
+
     col_secondary_form, col_secondary_results = st.columns(2, gap="large")
 
     with col_secondary_form:
@@ -379,6 +383,7 @@ def main():
                 value=C.MIN_T_BILL_AMOUNT,
                 step=C.T_BILL_AMOUNT_STEP,
                 key="secondary_face_value",
+                help="القيمة الإسمية للإذن الذي اشتريته سابقاً.",
             )
             original_yield_secondary = st.number_input(
                 prepare_arabic_text("عائد الشراء الأصلي (%)"),
@@ -387,11 +392,13 @@ def main():
                 step=0.1,
                 key="secondary_original_yield",
                 format="%.3f",
+                help="العائد الذي حصلت عليه عند شراء الإذن.",
             )
             original_tenor_secondary = st.selectbox(
                 prepare_arabic_text("أجل الإذن الأصلي (بالأيام)"),
                 options,
                 key="secondary_tenor",
+                help="مدة الإذن الأصلية.",
             )
             tax_rate_secondary = st.number_input(
                 prepare_arabic_text("نسبة الضريبة على الأرباح (%)"),
@@ -401,6 +408,7 @@ def main():
                 step=0.5,
                 format="%.1f",
                 key="secondary_tax",
+                help="نسبة الضريبة التي ستطبق على ربحك.",
             )
 
             st.subheader(prepare_arabic_text("2. أدخل تفاصيل البيع"), anchor=False)
@@ -413,6 +421,7 @@ def main():
                 value=min(60, max_holding_days),
                 max_value=max_holding_days,
                 step=1,
+                help="عدد الأيام التي احتفظت بها بالإذن قبل أن تقرر بيعه.",
             )
             secondary_market_yield = st.number_input(
                 prepare_arabic_text("العائد السائد في السوق للمشتري (%)"),
@@ -420,26 +429,28 @@ def main():
                 value=30.0,
                 step=0.1,
                 format="%.3f",
+                help="العائد الحالي في السوق الذي سيحصل عليه المشتري الجديد.",
             )
-            calc_secondary_sale_button = st.button(
+
+            if st.button(
                 prepare_arabic_text("حلل سعر البيع الثانوي"),
                 use_container_width=True,
                 type="primary",
                 key="secondary_calc",
-            )
+            ):
+                st.session_state.secondary_results = analyze_secondary_sale(
+                    face_value_secondary,
+                    original_yield_secondary,
+                    original_tenor_secondary,
+                    early_sale_days_secondary,
+                    secondary_market_yield,
+                    tax_rate_secondary,
+                )
 
-    secondary_results_placeholder = col_secondary_results.empty()
-    if calc_secondary_sale_button:
-        try:
-            results = analyze_secondary_sale(
-                face_value_secondary,
-                original_yield_secondary,
-                original_tenor_secondary,
-                early_sale_days_secondary,
-                secondary_market_yield,
-                tax_rate_secondary,
-            )
-            with secondary_results_placeholder.container(border=True):
+    with col_secondary_results:
+        if st.session_state.secondary_results:
+            results = st.session_state.secondary_results
+            with st.container(border=True):
                 st.subheader(
                     prepare_arabic_text("✨ تحليل سعر البيع الثانوي"), anchor=False
                 )
@@ -488,17 +499,9 @@ def main():
                                 ),
                                 icon="ℹ️",
                             )
-        except Exception as e:
-            with secondary_results_placeholder.container(border=True):
-                st.error(
-                    prepare_arabic_text(f"حدث خطأ غير متوقع أثناء الحساب: {e}"),
-                    icon="🚨",
-                )
-    else:
-        with secondary_results_placeholder.container(border=True):
-            st.info(
-                prepare_arabic_text("✨ أدخل بيانات البيع في النموذج لتحليل قرارك.")
-            )
+        else:
+            with st.container(border=True):
+                st.info("📊 ستظهر نتائج تحليل البيع هنا.", icon="💡")
 
     st.divider()
     st.header(prepare_arabic_text("📈 تطور العائد تاريخيًا"))
@@ -522,9 +525,9 @@ def main():
                 color=C.TENOR_COLUMN_NAME,
                 markers=True,
                 labels={
-                    C.DATE_COLUMN_NAME: prepare_arabic_text("تاريخ التحديث"),
-                    C.YIELD_COLUMN_NAME: prepare_arabic_text("نسبة العائد (%)"),
-                    C.TENOR_COLUMN_NAME: prepare_arabic_text("الأجل (يوم)"),
+                    C.DATE_COLUMN_NAME: "تاريخ التحديث",
+                    C.YIELD_COLUMN_NAME: "نسبة العائد (%)",
+                    C.TENOR_COLUMN_NAME: "الأجل (يوم)",
                 },
                 title=prepare_arabic_text(
                     "التغير في متوسط العائد المرجح لأذون الخزانة"
