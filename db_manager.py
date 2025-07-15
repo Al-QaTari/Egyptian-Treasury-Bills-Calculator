@@ -1,4 +1,3 @@
-# db_manager.py (النسخة النهائية والمصححة لاجتياز كل الاختبارات)
 import sqlite3
 import pandas as pd
 import os
@@ -48,9 +47,16 @@ class DatabaseManager:
 
     def save_data(self, df: pd.DataFrame) -> None:
         logger.info(f"Saving {len(df)} rows to the database.")
+
+        # --- بداية الإصلاح: حذف العمود المساعد هنا ---
+        df_to_save = df.copy()
+        if "session_date_dt" in df_to_save.columns:
+            df_to_save = df_to_save.drop(columns=["session_date_dt"])
+        # --- نهاية الإصلاح ---
+
         try:
             with sqlite3.connect(self.db_filename) as conn:
-                df.to_sql(
+                df_to_save.to_sql(
                     C.TABLE_NAME,
                     conn,
                     if_exists="append",
@@ -68,20 +74,17 @@ class DatabaseManager:
             sql = f"INSERT OR REPLACE INTO {table.name} ({', '.join(keys)}) VALUES ({placeholders})"
             cursor.execute(sql, data)
 
-    # --- بداية الإصلاح النهائي ---
     def load_latest_data(
         self,
     ) -> Tuple[pd.DataFrame, Tuple[Optional[str], Optional[str]]]:
         logger.info("Loading latest data from the database.")
         try:
-            # الخطوة 1: الحصول على تاريخ أحدث جلسة
             latest_session_date = self.get_latest_session_date()
 
             if not latest_session_date:
                 return pd.DataFrame(), ("البيانات الأولية", None)
 
             with sqlite3.connect(self.db_filename) as conn:
-                # الخطوة 2: اختيار كل الصفوف التي تطابق هذا التاريخ فقط
                 query = f"""
                 SELECT "{C.TENOR_COLUMN_NAME}", "{C.YIELD_COLUMN_NAME}", "{C.SESSION_DATE_COLUMN_NAME}"
                 FROM "{C.TABLE_NAME}"
@@ -89,18 +92,25 @@ class DatabaseManager:
                 """
                 df = pd.read_sql_query(query, conn, params=(latest_session_date,))
 
-                # الخطوة 3: الحصول على تاريخ آخر تحديث بشكل منفصل
-                scrape_date_query = f'SELECT MAX("{C.DATE_COLUMN_NAME}") FROM "{C.TABLE_NAME}"'
-                max_scrape_date_str = pd.read_sql_query(
-                    scrape_date_query, conn
-                ).iloc[0, 0]
+                scrape_date_query = (
+                    f'SELECT MAX("{C.DATE_COLUMN_NAME}") FROM "{C.TABLE_NAME}"'
+                )
+                max_scrape_date_str = pd.read_sql_query(scrape_date_query, conn).iloc[
+                    0, 0
+                ]
 
                 if not df.empty and max_scrape_date_str:
                     last_update_dt_utc = pd.to_datetime(max_scrape_date_str)
                     cairo_tz = pytz.timezone(C.TIMEZONE)
-                    last_update_dt_cairo = last_update_dt_utc.tz_localize(
-                        "UTC"
-                    ).tz_convert(cairo_tz)
+
+                    # --- بداية الإصلاح: التعامل الصحيح مع التوقيت ---
+                    if last_update_dt_utc.tzinfo is None:
+                        last_update_dt_cairo = last_update_dt_utc.tz_localize(
+                            "UTC"
+                        ).tz_convert(cairo_tz)
+                    else:
+                        last_update_dt_cairo = last_update_dt_utc.tz_convert(cairo_tz)
+                    # --- نهاية الإصلاح ---
 
                     last_update_date = last_update_dt_cairo.strftime("%Y-%m-%d")
                     last_update_time = last_update_dt_cairo.strftime("%I:%M %p")
@@ -111,7 +121,6 @@ class DatabaseManager:
         except Exception as e:
             logger.warning(f"Could not load latest data (table might be empty): {e}")
             return pd.DataFrame(), ("البيانات الأولية", None)
-    # --- نهاية الإصلاح النهائي ---
 
     def load_all_historical_data(self) -> pd.DataFrame:
         logger.info("Loading all historical data from the database.")
