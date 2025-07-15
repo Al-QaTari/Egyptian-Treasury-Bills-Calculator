@@ -29,7 +29,7 @@ def load_css(file_path: str) -> None:
 
 
 # --- IMPROVEMENT 1: Centralized Logging Configuration ---
-def setup_logging(level: int = logging.INFO) -> None:
+def setup_logging(level: int = logging.WARNING) -> None:  # <--- تم التعديل هنا
     """
     Configures the root logger for consistent formatting across all modules.
     Should be called once when the application starts.
@@ -42,6 +42,7 @@ def setup_logging(level: int = logging.INFO) -> None:
             datefmt="%Y-%m-%d %H:%M:%S",
             handlers=[logging.StreamHandler()],
         )
+        # هذا السطر لن يطبع شيئاً بعد الآن لأن مستواه INFO
         logger.info("Logging configured successfully.")
 
 
