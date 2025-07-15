@@ -1,10 +1,13 @@
+# cbe_scraper.py (النسخة النهائية والنظيفة)
 import pandas as pd
 from io import StringIO
 from datetime import datetime
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
+
+# تم حذف TimeoutException من هنا
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -23,7 +26,8 @@ logger = logging.getLogger(__name__)
 
 def setup_driver() -> Optional[webdriver.Chrome]:
     """
-    Initializes a headless Chrome WebDriver specifically for the Streamlit Cloud environment.
+    Initializes a headless Chrome WebDriver with options to suppress logs.
+    This version is compatible with both local development and Streamlit Cloud.
     """
     options = ChromeOptions()
     options.add_argument("--headless")
@@ -34,26 +38,25 @@ def setup_driver() -> Optional[webdriver.Chrome]:
     options.add_argument("--log-level=3")
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
-    # Tell Selenium where the browser executable installed by apt-get is.
-    options.binary_location = "/usr/bin/chromium"
-
-    # Tell Selenium where the driver executable installed by apt-get is.
-    service = Service(executable_path="/usr/bin/chromedriver")
-
     try:
+        # For Streamlit Cloud deployment
+        if os.path.exists("/usr/bin/chromium"):
+            options.binary_location = "/usr/bin/chromium"
+            service = Service(executable_path="/usr/bin/chromedriver")
+        # For local development
+        else:
+            log_path = os.devnull
+            service = Service(ChromeDriverManager().install(), log_output=log_path)
+
         driver = webdriver.Chrome(service=service, options=options)
-        logger.info("Selenium driver initialized successfully for Streamlit Cloud.")
+        logger.info("Selenium driver initialized successfully.")
         return driver
     except Exception as e:
-        logger.error(
-            f"Failed to initialize Selenium driver on Streamlit Cloud: {e}",
-            exc_info=True,
-        )
+        logger.error(f"Failed to initialize Selenium driver: {e}", exc_info=True)
         return None
 
 
 def verify_page_structure(page_source: str) -> None:
-    # This function remains unchanged
     logger.info("Verifying page structure for essential text markers...")
     for marker in C.ESSENTIAL_TEXT_MARKERS:
         if marker not in page_source:
@@ -64,7 +67,6 @@ def verify_page_structure(page_source: str) -> None:
 
 
 def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
-    # This function remains unchanged
     logger.info("Starting to parse HTML content using the robust logic.")
     soup = BeautifulSoup(page_source, "lxml")
     try:
@@ -125,6 +127,7 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
             .drop_duplicates(subset=[C.TENOR_COLUMN_NAME])
             .sort_values(by=C.TENOR_COLUMN_NAME)
         )
+        logger.info(f"Successfully parsed and merged data for {len(final_df)} tenors.")
         return final_df
     except Exception as e:
         logger.error(f"A critical error occurred during parsing: {e}", exc_info=True)
@@ -134,7 +137,6 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
 def fetch_data_from_cbe(
     db_manager: DatabaseManager, status_callback: Optional[Callable[[str], None]] = None
 ) -> None:
-    # This function remains unchanged
     retries = C.SCRAPER_RETRIES
     delay_seconds = C.SCRAPER_RETRY_DELAY_SECONDS
     for attempt in range(retries):
@@ -179,7 +181,7 @@ def fetch_data_from_cbe(
                 if status_callback:
                     status_callback("اكتمل تحديث البيانات بنجاح!")
                 return
-        except Exception as e:
+        except Exception as e:  # هذا السطر يعالج كل الأخطاء بما فيها TimeoutException
             logger.error(
                 f"An unexpected error occurred during full scrape attempt {attempt + 1}: {e}",
                 exc_info=True,
