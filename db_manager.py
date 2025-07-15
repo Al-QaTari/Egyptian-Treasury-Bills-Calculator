@@ -80,7 +80,10 @@ class DatabaseManager:
         Custom "upsert" method for pandas to_sql.
         Uses "INSERT OR REPLACE" to handle conflicts with the primary key.
         """
-        cursor = conn.cursor()
+        # --- بداية الإصلاح ---
+        # The 'conn' object passed by pandas is already a cursor, so we use it directly.
+        cursor = conn
+        # --- نهاية الإصلاح ---
         for data in data_iter:
             placeholders = ", ".join("?" * len(data))
             sql = f"INSERT OR REPLACE INTO {table.name} ({', '.join(keys)}) VALUES ({placeholders})"
