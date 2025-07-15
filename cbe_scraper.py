@@ -1,9 +1,10 @@
-# cbe_scraper.py (النسخة النهائية المرنة)
+# cbe_scraper.py (النسخة النهائية والنظيفة)
 import pandas as pd
 from io import StringIO
 from datetime import datetime
 from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
+
+# from selenium.common.exceptions import TimeoutException <-- تم حذفه
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -15,8 +16,9 @@ import logging
 import time
 from typing import Optional, Callable
 import pytz
-import os
-import platform  # تمت إضافة هذه المكتبة للتحقق من النظام
+
+# import os <-- تم حذفه
+import platform
 
 import constants as C
 from db_manager import DatabaseManager
@@ -38,20 +40,16 @@ def setup_driver() -> Optional[webdriver.Chrome]:
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
     try:
-        # --- بداية الحل: التحقق من بيئة التشغيل ---
-        # إذا كان النظام هو لينكس (مثل Streamlit Cloud) ومسار كروميوم موجود
         if platform.system() == "Linux" and os.path.exists("/usr/bin/chromium"):
             logger.info(
                 "Linux/Cloud environment detected. Using pre-installed chromium."
             )
             options.binary_location = "/usr/bin/chromium"
             service = Service(executable_path="/usr/bin/chromedriver")
-        # إذا كان النظام ويندوز أو ماك (للتشغيل المحلي)
         else:
             logger.info("Local environment detected. Using webdriver-manager.")
             log_path = os.devnull
             service = Service(ChromeDriverManager().install(), log_output=log_path)
-        # --- نهاية الحل ---
 
         driver = webdriver.Chrome(service=service, options=options)
         logger.info("Selenium driver initialized successfully.")
@@ -134,7 +132,6 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
             .drop_duplicates(subset=[C.TENOR_COLUMN_NAME])
             .sort_values(by=C.TENOR_COLUMN_NAME)
         )
-        logger.info(f"Successfully parsed and merged data for {len(final_df)} tenors.")
         return final_df
     except Exception as e:
         logger.error(f"A critical error occurred during parsing: {e}", exc_info=True)
@@ -188,7 +185,7 @@ def fetch_data_from_cbe(
                 if status_callback:
                     status_callback("اكتمل تحديث البيانات بنجاح!")
                 return
-        except Exception as e:
+        except Exception as e:  # هذا السطر يعالج كل الأخطاء بما فيها TimeoutException
             logger.error(
                 f"An unexpected error occurred during full scrape attempt {attempt + 1}: {e}",
                 exc_info=True,
