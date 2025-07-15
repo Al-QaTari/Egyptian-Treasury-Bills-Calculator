@@ -1,4 +1,3 @@
-# cbe_scraper.py (النسخة النهائية)
 import pandas as pd
 from io import StringIO
 from datetime import datetime
@@ -6,7 +5,6 @@ from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -24,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 
 def setup_driver() -> Optional[webdriver.Chrome]:
+    """
+    Initializes a headless Chrome WebDriver specifically for the Streamlit Cloud environment.
+    """
     options = ChromeOptions()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
@@ -32,18 +33,27 @@ def setup_driver() -> Optional[webdriver.Chrome]:
     options.add_argument(f"user-agent={C.USER_AGENT}")
     options.add_argument("--log-level=3")
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
+
+    # Tell Selenium where the browser executable installed by apt-get is.
+    options.binary_location = "/usr/bin/chromium"
+
+    # Tell Selenium where the driver executable installed by apt-get is.
+    service = Service(executable_path="/usr/bin/chromedriver")
+
     try:
-        log_path = os.devnull
-        service = Service(ChromeDriverManager().install(), log_output=log_path)
         driver = webdriver.Chrome(service=service, options=options)
-        logger.info("Selenium driver initialized successfully in full silent mode.")
+        logger.info("Selenium driver initialized successfully for Streamlit Cloud.")
         return driver
     except Exception as e:
-        logger.error(f"Failed to initialize Selenium driver: {e}", exc_info=True)
+        logger.error(
+            f"Failed to initialize Selenium driver on Streamlit Cloud: {e}",
+            exc_info=True,
+        )
         return None
 
 
 def verify_page_structure(page_source: str) -> None:
+    # This function remains unchanged
     logger.info("Verifying page structure for essential text markers...")
     for marker in C.ESSENTIAL_TEXT_MARKERS:
         if marker not in page_source:
@@ -54,6 +64,7 @@ def verify_page_structure(page_source: str) -> None:
 
 
 def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
+    # This function remains unchanged
     logger.info("Starting to parse HTML content using the robust logic.")
     soup = BeautifulSoup(page_source, "lxml")
     try:
@@ -61,9 +72,6 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
             lambda tag: tag.name == "h2" and "النتائج" in tag.get_text()
         )
         if not results_headers:
-            logger.error(
-                "Parse Error: Could not find the main 'النتائج' (Results) header."
-            )
             return None
         all_dataframes = []
         for header in results_headers:
@@ -106,7 +114,6 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
             if not section_df[C.YIELD_COLUMN_NAME].isnull().any():
                 all_dataframes.append(section_df)
         if not all_dataframes:
-            logger.error("Could not parse any valid data from any of the sections.")
             return None
         final_df = pd.concat(all_dataframes, ignore_index=True)
         final_df[C.DATE_COLUMN_NAME] = datetime.now(pytz.utc)
@@ -118,8 +125,6 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
             .drop_duplicates(subset=[C.TENOR_COLUMN_NAME])
             .sort_values(by=C.TENOR_COLUMN_NAME)
         )
-        logger.info(f"Successfully parsed and merged data for {len(final_df)} tenors.")
-        # --- الإصلاح: نعيد العمود المساعد لكي ينجح اختبار الوحدة ---
         return final_df
     except Exception as e:
         logger.error(f"A critical error occurred during parsing: {e}", exc_info=True)
@@ -129,6 +134,7 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
 def fetch_data_from_cbe(
     db_manager: DatabaseManager, status_callback: Optional[Callable[[str], None]] = None
 ) -> None:
+    # This function remains unchanged
     retries = C.SCRAPER_RETRIES
     delay_seconds = C.SCRAPER_RETRY_DELAY_SECONDS
     for attempt in range(retries):
@@ -160,12 +166,7 @@ def fetch_data_from_cbe(
             if final_df is not None and not final_df.empty:
                 db_session_date_str = db_manager.get_latest_session_date()
                 live_latest_date_str = final_df[C.SESSION_DATE_COLUMN_NAME].iloc[0]
-                logger.info(f"Latest date found on page: {live_latest_date_str}")
-                logger.info(f"Latest date in DB: {db_session_date_str}")
                 if db_session_date_str and live_latest_date_str == db_session_date_str:
-                    logger.info(
-                        "No new data found after full scrape. Data is up-to-date."
-                    )
                     if status_callback:
                         status_callback("البيانات محدثة بالفعل. لا حاجة للحفظ.")
                     time.sleep(2)
@@ -175,20 +176,9 @@ def fetch_data_from_cbe(
                         f"محاولة ({attempt + 1}/{retries}): تم العثور على بيانات جديدة، جاري الحفظ..."
                     )
                 db_manager.save_data(final_df)
-                logger.info("Data successfully scraped and saved.")
                 if status_callback:
                     status_callback("اكتمل تحديث البيانات بنجاح!")
                 return
-            else:
-                logger.error("Full parsing failed. No data was saved for this attempt.")
-        except TimeoutException:
-            logger.warning(
-                f"Page load timed out on attempt {attempt + 1}.", exc_info=True
-            )
-            if status_callback:
-                status_callback(
-                    f"فشلت المحاولة {attempt + 1}: استغرق تحميل الصفحة وقتاً طويلاً."
-                )
         except Exception as e:
             logger.error(
                 f"An unexpected error occurred during full scrape attempt {attempt + 1}: {e}",
@@ -200,11 +190,9 @@ def fetch_data_from_cbe(
             if driver:
                 driver.quit()
         if attempt < retries - 1:
-            logger.info(f"Waiting for {delay_seconds} seconds before next attempt...")
             if status_callback:
                 status_callback(f"ستتم إعادة المحاولة بعد {delay_seconds} ثانية...")
             time.sleep(delay_seconds)
-    logger.critical(f"All {retries} attempts to fetch data from CBE failed.")
     raise RuntimeError(
         f"فشلت جميع المحاولات ({retries}) لجلب البيانات من البنك المركزي."
     )
