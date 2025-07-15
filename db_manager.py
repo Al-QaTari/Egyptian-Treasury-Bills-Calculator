@@ -1,8 +1,9 @@
+# db_manager.py (النسخة النهائية والنظيفة)
 import sqlite3
 import pandas as pd
 import os
 import logging
-from datetime import datetime
+# from datetime import datetime  <-- تم حذف هذا السطر غير المستخدم
 from typing import Tuple, Optional
 import streamlit as st
 import pytz
@@ -42,20 +43,14 @@ class DatabaseManager:
             raise
 
     def save_data(self, df: pd.DataFrame) -> None:
-        # --- بداية الإصلاح: تنظيف البيانات قبل الحفظ ---
         df_to_save = df.copy()
         if "session_date_dt" in df_to_save.columns:
             df_to_save = df_to_save.drop(columns=["session_date_dt"])
-        # --- نهاية الإصلاح ---
 
         try:
             with sqlite3.connect(self.db_filename) as conn:
                 df_to_save.to_sql(
-                    C.TABLE_NAME,
-                    conn,
-                    if_exists="append",
-                    index=False,
-                    method=self._upsert,
+                    C.TABLE_NAME, conn, if_exists="append", index=False, method=self._upsert
                 )
             logger.info("Data saved successfully.")
         except sqlite3.Error as e:
@@ -68,10 +63,7 @@ class DatabaseManager:
             sql = f"INSERT OR REPLACE INTO {table.name} ({', '.join(keys)}) VALUES ({placeholders})"
             cursor.execute(sql, data)
 
-    def load_latest_data(
-        self,
-    ) -> Tuple[pd.DataFrame, Tuple[Optional[str], Optional[str]]]:
-        # --- بداية الإصلاح: إعادة الاستعلام الصحيح والأقوى ---
+    def load_latest_data(self) -> Tuple[pd.DataFrame, Tuple[Optional[str], Optional[str]]]:
         try:
             with sqlite3.connect(self.db_filename) as conn:
                 query = f"""
@@ -90,11 +82,9 @@ class DatabaseManager:
                 if not df.empty:
                     last_update_dt_utc = pd.to_datetime(df["max_scrape_date"].iloc[0])
                     cairo_tz = pytz.timezone(C.TIMEZONE)
-
+                    
                     if last_update_dt_utc.tzinfo is None:
-                        last_update_dt_cairo = last_update_dt_utc.tz_localize(
-                            "UTC"
-                        ).tz_convert(cairo_tz)
+                        last_update_dt_cairo = last_update_dt_utc.tz_localize("UTC").tz_convert(cairo_tz)
                     else:
                         last_update_dt_cairo = last_update_dt_utc.tz_convert(cairo_tz)
 
@@ -108,8 +98,6 @@ class DatabaseManager:
         except Exception as e:
             logger.warning(f"Could not load latest data (table might be empty): {e}")
             return pd.DataFrame(), ("البيانات الأولية", None)
-
-    # --- نهاية الإصلاح ---
 
     def load_all_historical_data(self) -> pd.DataFrame:
         try:
