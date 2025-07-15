@@ -1,16 +1,16 @@
 import streamlit as st
 import os
 import logging
-from typing import Any, Optional
+
+# --- بداية الإصلاح ---
+from typing import Optional
+
+# --- نهاية الإصلاح ---
 
 logger = logging.getLogger(__name__)
 
 
 def prepare_arabic_text(text: str) -> str:
-    """
-    This function now does nothing because the system handles Arabic correctly.
-    It just returns the text as it is.
-    """
     try:
         return str(text)
     except Exception:
@@ -19,9 +19,6 @@ def prepare_arabic_text(text: str) -> str:
 
 
 def load_css(file_path: str) -> None:
-    """
-    Loads an external CSS file into the Streamlit app for custom styling.
-    """
     if os.path.exists(file_path):
         logger.debug(f"Loading CSS from {file_path}")
         with open(file_path, encoding="utf-8") as f:
@@ -31,10 +28,6 @@ def load_css(file_path: str) -> None:
 
 
 def setup_logging(level: int = logging.INFO) -> None:
-    """
-    Configures the root logger for consistent formatting across all modules.
-    Should be called once when the application starts.
-    """
     if not logging.getLogger().handlers:
         logging.basicConfig(
             level=level,
@@ -46,16 +39,6 @@ def setup_logging(level: int = logging.INFO) -> None:
 
 
 def format_currency(value: Optional[float], currency_symbol: str = "جنيه") -> str:
-    """
-    Formats a numeric value into a standardized currency string.
-
-    Args:
-        value (Optional[float]): The number to format.
-        currency_symbol (str): The currency symbol or text to append.
-
-    Returns:
-        A formatted currency string (e.g., "12,345.68 جنيه").
-    """
     if value is None:
         logger.debug("Formatting a None value to default currency string.")
         return f"- {prepare_arabic_text(currency_symbol)}"
