@@ -111,6 +111,10 @@ def main():
     <div class="centered-header" style="background-color: #343a40; padding: 20px 10px; border-radius: 15px; margin-bottom: 1rem; box-shadow: 0 4px 12px 0 rgba(0,0,0,0.1);">
         <h1 style="color: #ffffff; margin: 0; font-size: 2.5rem;">{prepare_arabic_text(C.APP_TITLE)}</h1>
         <p style="color: #aab8c2; margin: 10px 0 0 0; font-size: 1.1rem;">{prepare_arabic_text(C.APP_HEADER)}</p>
+        <div style="margin-top: 15px; font-size: 0.9rem; color: #adb5bd;">
+            {prepare_arabic_text("صُمم وبُرمج بواسطة")} 
+            <span style="font-weight: bold; color: #00bfff;">{C.AUTHOR_NAME}</span>
+        </div>
     </div>
     """,
         unsafe_allow_html=True,
