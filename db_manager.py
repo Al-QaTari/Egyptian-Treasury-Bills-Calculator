@@ -20,7 +20,6 @@ def get_db_manager(db_filename: str = C.DB_FILENAME) -> "DatabaseManager":
 class DatabaseManager:
     def __init__(self, db_filename: str = C.DB_FILENAME):
         self.db_filename = os.path.abspath(db_filename)
-        logger.info(f"Initializing new DB Manager instance for: {self.db_filename}")
         self._init_db()
 
     def _init_db(self) -> None:
@@ -38,17 +37,12 @@ class DatabaseManager:
                 )
                 """
                 )
-                logger.info(
-                    f"Database '{self.db_filename}' and table '{C.TABLE_NAME}' are ready."
-                )
         except sqlite3.Error as e:
             logger.error(f"Database initialization failed: {e}", exc_info=True)
             raise
 
     def save_data(self, df: pd.DataFrame) -> None:
-        logger.info(f"Saving {len(df)} rows to the database.")
-
-        # --- بداية الإصلاح: حذف العمود المساعد هنا ---
+        # --- بداية الإصلاح: تنظيف البيانات قبل الحفظ ---
         df_to_save = df.copy()
         if "session_date_dt" in df_to_save.columns:
             df_to_save = df_to_save.drop(columns=["session_date_dt"])
@@ -77,44 +71,37 @@ class DatabaseManager:
     def load_latest_data(
         self,
     ) -> Tuple[pd.DataFrame, Tuple[Optional[str], Optional[str]]]:
-        logger.info("Loading latest data from the database.")
+        # --- بداية الإصلاح: إعادة الاستعلام الصحيح والأقوى ---
         try:
-            latest_session_date = self.get_latest_session_date()
-
-            if not latest_session_date:
-                return pd.DataFrame(), ("البيانات الأولية", None)
-
             with sqlite3.connect(self.db_filename) as conn:
                 query = f"""
-                SELECT "{C.TENOR_COLUMN_NAME}", "{C.YIELD_COLUMN_NAME}", "{C.SESSION_DATE_COLUMN_NAME}"
-                FROM "{C.TABLE_NAME}"
-                WHERE "{C.SESSION_DATE_COLUMN_NAME}" = ?
-                """
-                df = pd.read_sql_query(query, conn, params=(latest_session_date,))
-
-                scrape_date_query = (
-                    f'SELECT MAX("{C.DATE_COLUMN_NAME}") FROM "{C.TABLE_NAME}"'
+                WITH RankedData AS (
+                    SELECT *,
+                           ROW_NUMBER() OVER(PARTITION BY "{C.TENOR_COLUMN_NAME}" ORDER BY "{C.DATE_COLUMN_NAME}" DESC) as rn,
+                           MAX("{C.DATE_COLUMN_NAME}") OVER () as max_scrape_date
+                    FROM "{C.TABLE_NAME}"
                 )
-                max_scrape_date_str = pd.read_sql_query(scrape_date_query, conn).iloc[
-                    0, 0
-                ]
+                SELECT "{C.TENOR_COLUMN_NAME}", "{C.YIELD_COLUMN_NAME}", "{C.SESSION_DATE_COLUMN_NAME}", max_scrape_date
+                FROM RankedData
+                WHERE rn = 1;
+                """
+                df = pd.read_sql_query(query, conn)
 
-                if not df.empty and max_scrape_date_str:
-                    last_update_dt_utc = pd.to_datetime(max_scrape_date_str)
+                if not df.empty:
+                    last_update_dt_utc = pd.to_datetime(df["max_scrape_date"].iloc[0])
                     cairo_tz = pytz.timezone(C.TIMEZONE)
 
-                    # --- بداية الإصلاح: التعامل الصحيح مع التوقيت ---
                     if last_update_dt_utc.tzinfo is None:
                         last_update_dt_cairo = last_update_dt_utc.tz_localize(
                             "UTC"
                         ).tz_convert(cairo_tz)
                     else:
                         last_update_dt_cairo = last_update_dt_utc.tz_convert(cairo_tz)
-                    # --- نهاية الإصلاح ---
 
                     last_update_date = last_update_dt_cairo.strftime("%Y-%m-%d")
                     last_update_time = last_update_dt_cairo.strftime("%I:%M %p")
 
+                    df = df.drop(columns=["max_scrape_date"])
                     return df, (last_update_date, last_update_time)
 
                 return pd.DataFrame(), ("البيانات الأولية", None)
@@ -122,8 +109,9 @@ class DatabaseManager:
             logger.warning(f"Could not load latest data (table might be empty): {e}")
             return pd.DataFrame(), ("البيانات الأولية", None)
 
+    # --- نهاية الإصلاح ---
+
     def load_all_historical_data(self) -> pd.DataFrame:
-        logger.info("Loading all historical data from the database.")
         try:
             with sqlite3.connect(self.db_filename) as conn:
                 query = f'SELECT * FROM "{C.TABLE_NAME}"'
@@ -133,7 +121,6 @@ class DatabaseManager:
             return pd.DataFrame()
 
     def get_latest_session_date(self) -> Optional[str]:
-        logger.info("Fetching latest session date from database.")
         try:
             with sqlite3.connect(self.db_filename) as conn:
                 query = f"""
@@ -146,8 +133,6 @@ class DatabaseManager:
                 LIMIT 1;
                 """
                 result = conn.cursor().execute(query).fetchone()
-                if result:
-                    return result[0]
-                return None
+                return result[0] if result else None
         except sqlite3.Error:
             return None
