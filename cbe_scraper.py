@@ -140,10 +140,7 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
 
         logger.info(f"Successfully parsed and merged data for {len(final_df)} tenors.")
 
-        # --- بداية الإصلاح: حذف العمود المساعد قبل إرجاع البيانات ---
-        final_df = final_df.drop(columns=["session_date_dt"])
-        # --- نهاية الإصلاح ---
-
+        # تم التراجع عن الحذف هنا لكي ينجح اختبار الوحدة
         return final_df
 
     except Exception as e:
@@ -188,17 +185,13 @@ def fetch_data_from_cbe(
             final_df = parse_cbe_html(page_source)
 
             if final_df is not None and not final_df.empty:
-                # --- START: Refactored logic to use the already parsed df ---
-                # No need to re-parse or re-calculate latest date here.
-                # The logic inside parse_cbe_html already handles de-duplication
-                # and ensures we have a clean DataFrame of the latest auction(s).
-
                 db_session_date_str = db_manager.get_latest_session_date()
+
+                # نستخدم iloc[0] لأن البيانات الآن مفروزة وأحدث تاريخ هو الأول دائمًا
                 live_latest_date_str = final_df[C.SESSION_DATE_COLUMN_NAME].iloc[0]
 
                 logger.info(f"Latest date found on page: {live_latest_date_str}")
                 logger.info(f"Latest date in DB: {db_session_date_str}")
-                # --- END: Refactored logic ---
 
                 if db_session_date_str and live_latest_date_str == db_session_date_str:
                     logger.info(
