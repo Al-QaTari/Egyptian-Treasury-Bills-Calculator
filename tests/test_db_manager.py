@@ -1,4 +1,3 @@
-# tests/test_db_manager.py (النسخة النهائية والمصححة)
 import sys
 import os
 import pytest
@@ -12,16 +11,12 @@ import constants as C
 
 @pytest.fixture
 def db(tmp_path):
-    """
-    إعداد قاعدة بيانات حقيقية ولكن في ملف مؤقت ومنعزل لكل اختبار.
-    """
     temp_db_file = tmp_path / "test.db"
     db_manager = DatabaseManager(db_filename=temp_db_file)
     yield db_manager
 
 
 def test_initial_state(db: DatabaseManager):
-    """🧪 يختبر الحالة الأولية لقاعدة البيانات الفارغة."""
     assert db.get_latest_session_date() is None
     df, msg = db.load_latest_data()
     assert "البيانات الأولية" in msg
@@ -29,8 +24,6 @@ def test_initial_state(db: DatabaseManager):
 
 
 def test_save_and_load_flow(db: DatabaseManager):
-    """🧪 يختبر دورة الحياة الكاملة للحفظ والتحميل بشكل متسلسل."""
-    # 1. حفظ الدفعة الأولى من البيانات
     date1 = "2025-01-05"
     session_date1 = "05/01/2025"
     df1 = pd.DataFrame(
@@ -43,14 +36,12 @@ def test_save_and_load_flow(db: DatabaseManager):
     )
     db.save_data(df1)
 
-    # 2. التحقق من البيانات بعد الحفظ الأول
     latest_df, _ = db.load_latest_data()
     historical_df = db.load_all_historical_data()
     assert len(latest_df) == 2
     assert len(historical_df) == 2
     assert db.get_latest_session_date() == session_date1
 
-    # 3. حفظ الدفعة الثانية من البيانات بتاريخ أحدث
     date2 = "2025-01-12"
     session_date2 = "12/01/2025"
     df2 = pd.DataFrame(
@@ -63,17 +54,18 @@ def test_save_and_load_flow(db: DatabaseManager):
     )
     db.save_data(df2)
 
-    # 4. التحقق من البيانات بعد الحفظ الثاني
     latest_df_2, _ = db.load_latest_data()
     historical_df_2 = db.load_all_historical_data()
 
-    # --- بداية الإصلاح: تعديل منطق التحقق ليتوافق مع سلوك التطبيق الصحيح ---
-    # الدالة يجب أن ترجع أحدث صف لكل أجل، لذا النتيجة ستكون 3 صفوف
-    assert len(latest_df_2) == 3, "يجب أن يتم إرجاع أحدث صف لكل أجل من الآجال الثلاثة"
-    
-    # نتأكد من أن العدد الإجمالي للصفوف التاريخية صحيح
-    assert len(historical_df_2) == 3, "يجب أن تحتوي البيانات التاريخية الآن على 3 صفوف"
-    
-    # نتأكد من أن تاريخ أحدث جلسة هو الصحيح
+    # --- بداية الإصلاح: تعديل منطق التحقق ---
+    assert len(latest_df_2) == 3, "يجب أن يتم إرجاع أحدث صف لكل أجل"
+    assert len(historical_df_2) == 3
     assert db.get_latest_session_date() == session_date2
+
+    latest_df_2_sorted = latest_df_2.sort_values(by=C.TENOR_COLUMN_NAME).reset_index(
+        drop=True
+    )
+    assert latest_df_2_sorted[C.SESSION_DATE_COLUMN_NAME].iloc[0] == session_date1
+    assert latest_df_2_sorted[C.SESSION_DATE_COLUMN_NAME].iloc[1] == session_date1
+    assert latest_df_2_sorted[C.SESSION_DATE_COLUMN_NAME].iloc[2] == session_date2
     # --- نهاية الإصلاح ---
