@@ -1,4 +1,4 @@
-# db_manager.py (النسخة النهائية مع دعم التاريخ والوقت)
+# db_manager.py (النسخة المصححة)
 import sqlite3
 import pandas as pd
 import os
@@ -62,7 +62,11 @@ class DatabaseManager:
             logger.error(f"Failed to save data to database: {e}", exc_info=True)
 
     def _upsert(self, table, conn, keys, data_iter):
-        cursor = conn.cursor()
+        # --- بداية الإصلاح ---
+        # الكائن 'conn' الذي تمرره دالة to_sql هو بالفعل مؤشر (cursor) وليس اتصال.
+        # لذلك، نستخدمه مباشرة.
+        cursor = conn
+        # --- نهاية الإصلاح ---
         for data in data_iter:
             placeholders = ", ".join("?" * len(data))
             sql = f"INSERT OR REPLACE INTO {table.name} ({', '.join(keys)}) VALUES ({placeholders})"
@@ -95,7 +99,6 @@ class DatabaseManager:
                         "UTC"
                     ).tz_convert(cairo_tz)
 
-                    # --- MODIFICATION: Return date and time as a tuple ---
                     last_update_date = last_update_dt_cairo.strftime("%Y-%m-%d")
                     last_update_time = last_update_dt_cairo.strftime("%I:%M %p")
 
