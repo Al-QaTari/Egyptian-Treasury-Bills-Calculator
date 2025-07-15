@@ -1,4 +1,4 @@
-# db_manager.py (النسخة المصححة)
+# db_manager.py (النسخة المصححة لاجتياز الاختبارات)
 import sqlite3
 import pandas as pd
 import os
@@ -62,23 +62,21 @@ class DatabaseManager:
             logger.error(f"Failed to save data to database: {e}", exc_info=True)
 
     def _upsert(self, table, conn, keys, data_iter):
-        # --- بداية الإصلاح ---
-        # الكائن 'conn' الذي تمرره دالة to_sql هو بالفعل مؤشر (cursor) وليس اتصال.
-        # لذلك، نستخدمه مباشرة.
+        # الكائن 'conn' الذي يتم تمريره هو بالفعل المؤشر، لذلك نستخدمه مباشرة
         cursor = conn
-        # --- نهاية الإصلاح ---
         for data in data_iter:
             placeholders = ", ".join("?" * len(data))
             sql = f"INSERT OR REPLACE INTO {table.name} ({', '.join(keys)}) VALUES ({placeholders})"
             cursor.execute(sql, data)
 
-    @st.cache_data(ttl=60)
+    # --- بداية الإصلاح: تم حذف @st.cache_data من هنا ---
     def load_latest_data(
-        _self,
+        self,
     ) -> Tuple[pd.DataFrame, Tuple[Optional[str], Optional[str]]]:
+        # --- نهاية الإصلاح ---
         logger.info("Loading latest data from the database.")
         try:
-            with sqlite3.connect(_self.db_filename) as conn:
+            with sqlite3.connect(self.db_filename) as conn:
                 query = f"""
                 WITH RankedData AS (
                     SELECT *,
@@ -110,11 +108,12 @@ class DatabaseManager:
             logger.warning(f"Could not load latest data (table might be empty): {e}")
             return pd.DataFrame(C.INITIAL_DATA), ("البيانات الأولية", None)
 
-    @st.cache_data(ttl=3600)
-    def load_all_historical_data(_self) -> pd.DataFrame:
+    # --- بداية الإصلاح: تم حذف @st.cache_data من هنا ---
+    def load_all_historical_data(self) -> pd.DataFrame:
+        # --- نهاية الإصلاح ---
         logger.info("Loading all historical data from the database.")
         try:
-            with sqlite3.connect(_self.db_filename) as conn:
+            with sqlite3.connect(self.db_filename) as conn:
                 query = f'SELECT * FROM "{C.TABLE_NAME}"'
                 df = pd.read_sql_query(query, conn)
                 return df.sort_values(by=C.DATE_COLUMN_NAME, ascending=False)
