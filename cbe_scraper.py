@@ -1,10 +1,9 @@
-# cbe_scraper.py (النسخة النهائية والنظيفة)
+# cbe_scraper.py (النسخة النهائية المرنة)
 import pandas as pd
 from io import StringIO
 from datetime import datetime
 from selenium import webdriver
-
-# تم حذف TimeoutException من هنا
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
@@ -17,6 +16,7 @@ import time
 from typing import Optional, Callable
 import pytz
 import os
+import platform  # تمت إضافة هذه المكتبة للتحقق من النظام
 
 import constants as C
 from db_manager import DatabaseManager
@@ -26,8 +26,7 @@ logger = logging.getLogger(__name__)
 
 def setup_driver() -> Optional[webdriver.Chrome]:
     """
-    Initializes a headless Chrome WebDriver with options to suppress logs.
-    This version is compatible with both local development and Streamlit Cloud.
+    Initializes a headless Chrome WebDriver with environment-specific settings.
     """
     options = ChromeOptions()
     options.add_argument("--headless")
@@ -39,14 +38,20 @@ def setup_driver() -> Optional[webdriver.Chrome]:
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
 
     try:
-        # For Streamlit Cloud deployment
-        if os.path.exists("/usr/bin/chromium"):
+        # --- بداية الحل: التحقق من بيئة التشغيل ---
+        # إذا كان النظام هو لينكس (مثل Streamlit Cloud) ومسار كروميوم موجود
+        if platform.system() == "Linux" and os.path.exists("/usr/bin/chromium"):
+            logger.info(
+                "Linux/Cloud environment detected. Using pre-installed chromium."
+            )
             options.binary_location = "/usr/bin/chromium"
             service = Service(executable_path="/usr/bin/chromedriver")
-        # For local development
+        # إذا كان النظام ويندوز أو ماك (للتشغيل المحلي)
         else:
+            logger.info("Local environment detected. Using webdriver-manager.")
             log_path = os.devnull
             service = Service(ChromeDriverManager().install(), log_output=log_path)
+        # --- نهاية الحل ---
 
         driver = webdriver.Chrome(service=service, options=options)
         logger.info("Selenium driver initialized successfully.")
@@ -60,7 +65,9 @@ def verify_page_structure(page_source: str) -> None:
     logger.info("Verifying page structure for essential text markers...")
     for marker in C.ESSENTIAL_TEXT_MARKERS:
         if marker not in page_source:
-            error_msg = f"Page structure verification failed! Marker '{marker}' not found. Site design may have changed."
+            error_msg = (
+                f"Page structure verification failed! Marker '{marker}' not found."
+            )
             logger.critical(error_msg)
             raise RuntimeError(error_msg)
     logger.info("Page structure verification successful. All markers found.")
@@ -181,7 +188,7 @@ def fetch_data_from_cbe(
                 if status_callback:
                     status_callback("اكتمل تحديث البيانات بنجاح!")
                 return
-        except Exception as e:  # هذا السطر يعالج كل الأخطاء بما فيها TimeoutException
+        except Exception as e:
             logger.error(
                 f"An unexpected error occurred during full scrape attempt {attempt + 1}: {e}",
                 exc_info=True,
