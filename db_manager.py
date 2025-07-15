@@ -1,10 +1,7 @@
-# db_manager.py (النسخة النهائية والنظيفة)
 import sqlite3
 import pandas as pd
 import os
 import logging
-
-# from datetime import datetime  <-- تم حذف هذا السطر غير المستخدم
 from typing import Tuple, Optional
 import streamlit as st
 import pytz
@@ -16,15 +13,28 @@ logger = logging.getLogger(__name__)
 
 @st.cache_resource
 def get_db_manager(db_filename: str = C.DB_FILENAME) -> "DatabaseManager":
+    """
+    Factory function to get a cached instance of the DatabaseManager.
+    Using st.cache_resource ensures that the database connection and
+    manager are created only once per session.
+    """
     return DatabaseManager(db_filename)
 
 
 class DatabaseManager:
     def __init__(self, db_filename: str = C.DB_FILENAME):
+        """
+        Initializes the DatabaseManager and ensures the database
+        and its table are created.
+        """
         self.db_filename = os.path.abspath(db_filename)
         self._init_db()
 
     def _init_db(self) -> None:
+        """
+        Initializes the database. Creates the table for T-bill data
+        if it doesn't already exist.
+        """
         try:
             with sqlite3.connect(self.db_filename) as conn:
                 cursor = conn.cursor()
@@ -44,6 +54,10 @@ class DatabaseManager:
             raise
 
     def save_data(self, df: pd.DataFrame) -> None:
+        """
+        Saves a DataFrame to the database using an "upsert" operation.
+        If a record with the same primary key already exists, it's replaced.
+        """
         df_to_save = df.copy()
         if "session_date_dt" in df_to_save.columns:
             df_to_save = df_to_save.drop(columns=["session_date_dt"])
@@ -57,12 +71,16 @@ class DatabaseManager:
                     index=False,
                     method=self._upsert,
                 )
-            logger.info("Data saved successfully.")
+            logger.info(f"{len(df_to_save)} records processed for saving.")
         except sqlite3.Error as e:
             logger.error(f"Failed to save data to database: {e}", exc_info=True)
 
     def _upsert(self, table, conn, keys, data_iter):
-        cursor = conn
+        """
+        Custom "upsert" method for pandas to_sql.
+        Uses "INSERT OR REPLACE" to handle conflicts with the primary key.
+        """
+        cursor = conn.cursor()
         for data in data_iter:
             placeholders = ", ".join("?" * len(data))
             sql = f"INSERT OR REPLACE INTO {table.name} ({', '.join(keys)}) VALUES ({placeholders})"
@@ -71,6 +89,10 @@ class DatabaseManager:
     def load_latest_data(
         self,
     ) -> Tuple[pd.DataFrame, Tuple[Optional[str], Optional[str]]]:
+        """
+        Loads the most recent record for each T-bill tenor.
+        Also returns the timestamp of the last data scrape, converted to Cairo time.
+        """
         try:
             with sqlite3.connect(self.db_filename) as conn:
                 query = f"""
@@ -91,11 +113,9 @@ class DatabaseManager:
                     cairo_tz = pytz.timezone(C.TIMEZONE)
 
                     if last_update_dt_utc.tzinfo is None:
-                        last_update_dt_cairo = last_update_dt_utc.tz_localize(
-                            "UTC"
-                        ).tz_convert(cairo_tz)
-                    else:
-                        last_update_dt_cairo = last_update_dt_utc.tz_convert(cairo_tz)
+                        last_update_dt_utc = last_update_dt_utc.tz_localize("UTC")
+
+                    last_update_dt_cairo = last_update_dt_utc.tz_convert(cairo_tz)
 
                     last_update_date = last_update_dt_cairo.strftime("%Y-%m-%d")
                     last_update_time = last_update_dt_cairo.strftime("%I:%M %p")
@@ -104,32 +124,44 @@ class DatabaseManager:
                     return df, (last_update_date, last_update_time)
 
                 return pd.DataFrame(), ("البيانات الأولية", None)
-        except Exception as e:
-            logger.warning(f"Could not load latest data (table might be empty): {e}")
+        except sqlite3.Error as e:
+            logger.warning(
+                f"Could not load latest data (table might be empty): {e}", exc_info=True
+            )
             return pd.DataFrame(), ("البيانات الأولية", None)
 
     def load_all_historical_data(self) -> pd.DataFrame:
+        """
+        Loads all historical data from the database for charting purposes.
+        """
         try:
             with sqlite3.connect(self.db_filename) as conn:
                 query = f'SELECT * FROM "{C.TABLE_NAME}"'
                 df = pd.read_sql_query(query, conn)
                 return df.sort_values(by=C.DATE_COLUMN_NAME, ascending=False)
-        except Exception:
+        except sqlite3.Error as e:
+            logger.error(f"Failed to load historical data: {e}", exc_info=True)
             return pd.DataFrame()
 
     def get_latest_session_date(self) -> Optional[str]:
+        """
+        Gets the most recent session date from the database based on the date string.
+        Assumes date format is 'DD-MM-YYYY'.
+        """
         try:
             with sqlite3.connect(self.db_filename) as conn:
                 query = f"""
-                SELECT "{C.SESSION_DATE_COLUMN_NAME}" 
+                SELECT "{C.SESSION_DATE_COLUMN_NAME}"
                 FROM "{C.TABLE_NAME}"
-                ORDER BY 
+                ORDER BY
                     SUBSTR("{C.SESSION_DATE_COLUMN_NAME}", 7, 4) DESC,
                     SUBSTR("{C.SESSION_DATE_COLUMN_NAME}", 4, 2) DESC,
                     SUBSTR("{C.SESSION_DATE_COLUMN_NAME}", 1, 2) DESC
                 LIMIT 1;
                 """
-                result = conn.cursor().execute(query).fetchone()
+                cursor = conn.cursor()
+                result = cursor.execute(query).fetchone()
                 return result[0] if result else None
-        except sqlite3.Error:
+        except sqlite3.Error as e:
+            logger.error(f"Failed to get latest session date: {e}", exc_info=True)
             return None
