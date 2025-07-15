@@ -87,7 +87,7 @@ Egyptian-Treasury-Bills-Calculator/
 ├── .github/
 │   └── workflows/
 │       ├── quality_check.yml     # (CI): يفحص جودة الكود وتنسيقه مع كل تحديث.
-│       ├── scheduled_scrape.yml  # (CI): يقوم بجدولة جلب البيانات بشكل دوري (يوميًا مثلاً).
+│       ├── scheduled_scrape.yml  # (CI): يقوم بجدولة جلب البيانات بشكل دوري (يوميًا ً).
 │       └── virus-scan.yml        # (CI): يقوم بفحص الكود من الفيروسات كخطوة أمان إضافية.
 │
 ├── css/
