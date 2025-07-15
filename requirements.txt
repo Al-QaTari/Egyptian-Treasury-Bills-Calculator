@@ -1,18 +1,13 @@
-# Application Libraries
 streamlit==1.46.0
 pandas==2.3.1
 selenium==4.22.0
-arabic-reshaper==3.0.0
-python-bidi==0.4.2
+webdriver-manager==4.0.1  # تمت إضافة هذه المكتبة الهامة
 pytz==2024.1
 beautifulsoup4==4.12.3
 lxml==5.2.2
-Flask==3.0.3
 plotly==6.2.0
-requests==2.32.4
 sentry-sdk==2.8.0
 python-dotenv==1.0.1
-watchdog==6.0.0
 
 # Testing Libraries
 pytest==8.3.2
