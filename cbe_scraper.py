@@ -1,4 +1,3 @@
-# cbe_scraper.py (النسخة النهائية مع إزالة الاستيراد غير المستخدم)
 import pandas as pd
 from io import StringIO
 from datetime import datetime
@@ -6,14 +5,16 @@ from selenium import webdriver
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
 import logging
 import time
-from typing import Optional, Callable  # <-- تم حذف List من هنا
-import platform
+from typing import Optional, Callable
+import pytz
+import os  # تمت إضافة هذه المكتبة
 
 import constants as C
 from db_manager import DatabaseManager
@@ -22,23 +23,32 @@ logger = logging.getLogger(__name__)
 
 
 def setup_driver() -> Optional[webdriver.Chrome]:
+    """
+    Initializes a headless Chrome WebDriver with options to suppress logs
+    from both the browser and the driver service.
+    """
     options = ChromeOptions()
     options.add_argument("--headless")
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--window-size=1920,1080")
     options.add_argument(f"user-agent={C.USER_AGENT}")
+
+    # إعدادات لإسكات سجلات المتصفح
+    options.add_argument("--log-level=3")
+    options.add_experimental_option("excludeSwitches", ["enable-logging"])
+
     try:
-        if platform.system() == "Windows" or platform.system() == "Darwin":
-            logger.info(
-                "Local environment (Windows/Mac) detected. Using automatic Selenium manager."
-            )
-            driver = webdriver.Chrome(options=options)
-        else:
-            logger.info("Linux environment detected. Using fixed driver path.")
-            service = Service(executable_path="/usr/bin/chromedriver")
-            driver = webdriver.Chrome(service=service, options=options)
-        logger.info("Selenium driver initialized successfully.")
+        # --- بداية التعديل الجديد: إسكات سجلات خدمة التشغيل ---
+        # هذا السطر يوجه مخرجات الدرايفر إلى اللا شيء
+        log_path = os.devnull
+        service = Service(ChromeDriverManager().install(), log_output=log_path)
+        # --- نهاية التعديل الجديد ---
+
+        driver = webdriver.Chrome(service=service, options=options)
+
+        # تم تعديل رسالة السجل لتعكس الوضع الجديد
+        logger.info("Selenium driver initialized successfully in full silent mode.")
         return driver
     except Exception as e:
         logger.error(f"Failed to initialize Selenium driver: {e}", exc_info=True)
@@ -56,15 +66,16 @@ def verify_page_structure(page_source: str) -> None:
 
 
 def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
-    logger.info("Starting to parse HTML content using the final robust logic.")
+    logger.info("Starting to parse HTML content using the robust logic.")
     soup = BeautifulSoup(page_source, "lxml")
-
     try:
         results_headers = soup.find_all(
             lambda tag: tag.name == "h2" and "النتائج" in tag.get_text()
         )
         if not results_headers:
-            logger.error("Parse Error: Could not find any 'النتائج' (Results) headers.")
+            logger.error(
+                "Parse Error: Could not find the main 'النتائج' (Results) header."
+            )
             return None
 
         all_dataframes = []
@@ -72,9 +83,6 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
         for header in results_headers:
             dates_table = header.find_next("table")
             if not dates_table:
-                logger.warning(
-                    "Found a 'Results' header but no subsequent table. Skipping section."
-                )
                 continue
 
             dates_df = pd.read_html(StringIO(str(dates_table)))[0]
@@ -85,11 +93,7 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
                 .tolist()
             )
             session_dates_row = dates_df[dates_df.iloc[:, 0] == "تاريخ الجلسة"]
-
             if session_dates_row.empty or not tenors:
-                logger.warning(
-                    "Could not find 'تاريخ الجلسة' row or tenors. Skipping section."
-                )
                 continue
             session_dates = session_dates_row.iloc[0, 1 : len(tenors) + 1].tolist()
 
@@ -102,14 +106,10 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
                 and C.ACCEPTED_BIDS_KEYWORD in tag.get_text()
             )
             if not accepted_bids_header:
-                logger.warning(
-                    "Could not find 'العروض المقبولة' header. Skipping section."
-                )
                 continue
 
             yields_table = accepted_bids_header.find_next("table")
             if not yields_table:
-                logger.warning("Could not find yields table. Skipping section.")
                 continue
 
             yields_df_raw = pd.read_html(StringIO(str(yields_table)))[0]
@@ -119,9 +119,6 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
                 yields_df_raw.iloc[:, 0].str.contains(C.YIELD_ANCHOR_TEXT, na=False)
             ]
             if yield_row.empty:
-                logger.warning(
-                    "Could not find 'متوسط العائد المرجح' row. Skipping section."
-                )
                 continue
 
             yield_series = yield_row.iloc[0, 1:].astype(float)
@@ -137,7 +134,7 @@ def parse_cbe_html(page_source: str) -> Optional[pd.DataFrame]:
             return None
 
         final_df = pd.concat(all_dataframes, ignore_index=True)
-        final_df[C.DATE_COLUMN_NAME] = datetime.now().strftime("%Y-%m-%d")
+        final_df[C.DATE_COLUMN_NAME] = datetime.now(pytz.utc)
         final_df["session_date_dt"] = pd.to_datetime(
             final_df[C.SESSION_DATE_COLUMN_NAME], format="%d/%m/%Y", errors="coerce"
         )
